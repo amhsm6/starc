@@ -19,8 +19,25 @@ pub type Block =
   List(Statement)
 
 pub type Statement {
-  IfStatement
+  EvalStatement(Expression)
 }
 
 pub type Type =
   String
+
+pub type Expression {
+  IntExpr(Int)
+  BoolExpr(Bool)
+
+  AddExpr(Expression, Expression)
+  SubExpr(Expression, Expression)
+  MulExpr(Expression, Expression)
+  DivExpr(Expression, Expression)
+
+  EQExpr(Expression, Expression)
+  NEQExpr(Expression, Expression)
+  LTExpr(Expression, Expression)
+  LEExpr(Expression, Expression)
+  GTExpr(Expression, Expression)
+  GEExpr(Expression, Expression)
+}

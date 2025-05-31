@@ -9,6 +9,15 @@ ParameterList = { ParameterDecl, }*
 ParameterDecl = { Ident, }* Type
 
 Block = "{" Statement* "}"
-Statement = "if"
+Statement = EvalStatement
+
+EvalStatement = Expression
+
+Expression = AddExpr { { "==" | "!=" | "<" | "<=" | ">" | ">=" } AddExpr }*
+AddExpr = MulExpr { { "+" | "-" } MulExpr }*
+MulExpr = PrimaryExpr { { "*" | "/" } PrimaryExpr }*
+PrimaryExpr = "(" Expression ")"
+  | IntExpr
+  | BoolExpr
 
 Ident = ( 'a-z' | 'A-Z' | '_' ) ( 'a-z' | 'A-Z' | '0-9' | '_' )*
