@@ -1,22 +1,25 @@
 import gleeunit/should
-import gsparse/lexer
+
+import starc/lexer
+import starc/lexer/core.{Pos}
+import starc/lexer/token
 
 pub fn parse_int_test() {
   lexer.lex("123")
   |> should.be_ok()
-  |> should.equal([lexer.TokenInt(123), lexer.TokenEOF])
+  |> should.equal([token.TokenInt(123), token.TokenEOF])
 
   lexer.lex("   123    ")
   |> should.be_ok()
-  |> should.equal([lexer.TokenInt(123), lexer.TokenEOF])
+  |> should.equal([token.TokenInt(123), token.TokenEOF])
 
   lexer.lex(" \n\n\n\n 1\n23  \n\n\n  ")
   |> should.be_ok()
-  |> should.equal([lexer.TokenInt(1), lexer.TokenInt(23), lexer.TokenEOF])
+  |> should.equal([token.TokenInt(1), token.TokenInt(23), token.TokenEOF])
 
   lexer.lex(" \n\n\n\n 1;\n23  \n\n\n  ")
   |> should.be_error()
-  |> should.equal(lexer.UnexpectedToken(lexer.Pos(5, 3), ";\n23 "))
+  |> should.equal(lexer.UnexpectedToken(Pos(5, 3), ";\n23 "))
 }
 
 pub fn strip_comment_test() {
@@ -25,11 +28,11 @@ pub fn strip_comment_test() {
   )
   |> should.be_ok()
   |> should.equal([
-    lexer.TokenInt(123),
-    lexer.TokenInt(567),
-    lexer.TokenInt(456),
-    lexer.TokenInt(23),
-    lexer.TokenEOF,
+    token.TokenInt(123),
+    token.TokenInt(567),
+    token.TokenInt(456),
+    token.TokenInt(23),
+    token.TokenEOF,
   ])
 
   lexer.lex(
@@ -37,50 +40,50 @@ pub fn strip_comment_test() {
   )
   |> should.be_ok()
   |> should.equal([
-    lexer.TokenInt(123),
-    lexer.TokenInt(567),
-    lexer.TokenInt(456),
-    lexer.TokenEOF,
+    token.TokenInt(123),
+    token.TokenInt(567),
+    token.TokenInt(456),
+    token.TokenEOF,
   ])
 }
 
 pub fn ident_test() {
   lexer.lex("foo")
   |> should.be_ok()
-  |> should.equal([lexer.TokenIdent("foo"), lexer.TokenEOF])
+  |> should.equal([token.TokenIdent("foo"), token.TokenEOF])
 }
 
 pub fn arith_test() {
   lexer.lex("(2 + 4 / 613 - 102) + (423 * (232 + 4/1+2-3-5))")
   |> should.be_ok()
   |> should.equal([
-    lexer.TokenLParen,
-    lexer.TokenInt(2),
-    lexer.TokenPlus,
-    lexer.TokenInt(4),
-    lexer.TokenSlash,
-    lexer.TokenInt(613),
-    lexer.TokenMinus,
-    lexer.TokenInt(102),
-    lexer.TokenRParen,
-    lexer.TokenPlus,
-    lexer.TokenLParen,
-    lexer.TokenInt(423),
-    lexer.TokenStar,
-    lexer.TokenLParen,
-    lexer.TokenInt(232),
-    lexer.TokenPlus,
-    lexer.TokenInt(4),
-    lexer.TokenSlash,
-    lexer.TokenInt(1),
-    lexer.TokenPlus,
-    lexer.TokenInt(2),
-    lexer.TokenMinus,
-    lexer.TokenInt(3),
-    lexer.TokenMinus,
-    lexer.TokenInt(5),
-    lexer.TokenRParen,
-    lexer.TokenRParen,
-    lexer.TokenEOF,
+    token.TokenLParen,
+    token.TokenInt(2),
+    token.TokenPlus,
+    token.TokenInt(4),
+    token.TokenSlash,
+    token.TokenInt(613),
+    token.TokenMinus,
+    token.TokenInt(102),
+    token.TokenRParen,
+    token.TokenPlus,
+    token.TokenLParen,
+    token.TokenInt(423),
+    token.TokenStar,
+    token.TokenLParen,
+    token.TokenInt(232),
+    token.TokenPlus,
+    token.TokenInt(4),
+    token.TokenSlash,
+    token.TokenInt(1),
+    token.TokenPlus,
+    token.TokenInt(2),
+    token.TokenMinus,
+    token.TokenInt(3),
+    token.TokenMinus,
+    token.TokenInt(5),
+    token.TokenRParen,
+    token.TokenRParen,
+    token.TokenEOF,
   ])
 }

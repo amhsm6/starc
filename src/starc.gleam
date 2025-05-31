@@ -1,8 +1,9 @@
 import gleam/io
 import gleam/result
 import gleam/string
-import gsparse/lexer
 import simplifile
+
+import starc/lexer
 
 type Error {
   FileError(simplifile.FileError)

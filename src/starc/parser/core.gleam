@@ -1,7 +1,7 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
-import gsparse/lexer.{type Token}
+import starc/lexer/token.{type Token}
 
 pub type Parser(a, r) {
   Parser(
@@ -15,10 +15,6 @@ pub type ParserState {
   Consumed(input: List(Token))
 }
 
-pub type ParserError {
-  ParserError(before: Token, reason: String)
-}
-
 fn unconsume(state: ParserState) -> ParserState {
   case state {
     Unconsumed(_) -> state
@@ -26,7 +22,7 @@ fn unconsume(state: ParserState) -> ParserState {
   }
 }
 
-fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
+pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
   use state, succ, fail <- Parser
 
   case state {
@@ -47,29 +43,29 @@ fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
   }
 }
 
-fn eat_exact(t: Token) -> Parser(Token, r) {
+pub fn eat_exact(t: Token) -> Parser(Token, r) {
   eat(fn(x) { x == t })
 }
 
-fn pure(value: a) -> Parser(a, r) {
+pub fn pure(value: a) -> Parser(a, r) {
   Parser(fn(state, succ, _) { succ(state, value) })
 }
 
-fn die(message: String) -> Parser(a, r) {
+pub fn die(message: String) -> Parser(a, r) {
   Parser(fn(state, _, fail) { fail(state, message) })
 }
 
-fn after(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
+pub fn perform(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
   use state, succ, fail <- Parser
   p.run(state, fn(state, x) { f(x).run(state, succ, fail) }, fail)
 }
 
-fn with_message(p: Parser(a, r), msg: String) -> Parser(a, r) {
+pub fn with_message(p: Parser(a, r), msg: String) -> Parser(a, r) {
   use state, succ, fail <- Parser
   p.run(state, succ, fn(state, _) { fail(state, msg) })
 }
 
-fn oneof(parsers: List(Parser(a, r)), nomatch_msg: String) -> Parser(a, r) {
+pub fn oneof(parsers: List(Parser(a, r)), nomatch_msg: String) -> Parser(a, r) {
   use state, succ, fail <- Parser
 
   let f =
@@ -87,7 +83,7 @@ fn oneof(parsers: List(Parser(a, r)), nomatch_msg: String) -> Parser(a, r) {
   f()
 }
 
-fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
+pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
   use state, succ, fail <- Parser
 
   p.run(
@@ -102,7 +98,7 @@ fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
   )
 }
 
-fn many(p: Parser(a, r)) -> Parser(List(a), r) {
+pub fn many(p: Parser(a, r)) -> Parser(List(a), r) {
   use state, succ, fail <- Parser
 
   p.run(
@@ -114,7 +110,7 @@ fn many(p: Parser(a, r)) -> Parser(List(a), r) {
   )
 }
 
-fn many_sep(p: Parser(a, r), sep: Parser(b, r)) -> Parser(List(a), r) {
+pub fn many_sep(p: Parser(a, r), sep: Parser(b, r)) -> Parser(List(a), r) {
   use state, succ, fail <- Parser
 
   maybe(p).run(
@@ -143,53 +139,5 @@ fn many_sep(p: Parser(a, r), sep: Parser(b, r)) -> Parser(List(a), r) {
       }
     },
     fail,
-  )
-}
-
-fn parse_eq() -> Parser(Token, r) {
-  use t <- after(eat_exact(lexer.TokenEquals))
-  use _ <- after(eat_exact(lexer.TokenLBrace) |> with_message("Expected {"))
-  use _ <- after(eat_exact(lexer.TokenRBrace) |> with_message("Expected }"))
-  pure(t)
-}
-
-fn parse_neq() -> Parser(Token, r) {
-  use t <- after(eat_exact(lexer.TokenNotEquals))
-  use _ <- after(eat_exact(lexer.TokenFn) |> with_message("Expected fn"))
-  use _ <- after(eat_exact(lexer.TokenStar) |> with_message("Expected *"))
-  pure(t)
-}
-
-pub fn parse_if() -> Parser(Nil, r) {
-  use _ <- after(eat_exact(lexer.TokenIf) |> with_message("Expected token IF"))
-  use _ <- after(
-    eat_exact(lexer.TokenLParen) |> with_message("Expected token LParen"),
-  )
-
-  use token <- after(oneof([parse_eq(), parse_neq()], "Expected == or !="))
-
-  pure(Nil)
-}
-
-pub fn parse_numbers() -> Parser(List(Int), r) {
-  let p =
-    eat(fn(t) {
-      case t {
-        lexer.TokenInt(_) -> True
-        _ -> False
-      }
-    })
-    |> after(fn(t) {
-      let assert lexer.TokenInt(n) = t
-      pure(n)
-    })
-
-  many_sep(p, eat_exact(lexer.TokenPlus))
-}
-
-pub fn parse_equals() -> Parser(List(Token), r) {
-  many_sep(
-    oneof([parse_eq(), parse_neq()], "expected == or !="),
-    eat_exact(lexer.TokenPlus),
   )
 }
