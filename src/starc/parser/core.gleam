@@ -15,6 +15,10 @@ pub type ParserState {
   Consumed(input: List(Token))
 }
 
+pub fn begin(input: List(Token)) -> ParserState {
+  Unconsumed(input)
+}
+
 fn unconsume(state: ParserState) -> ParserState {
   case state {
     Unconsumed(_) -> state
@@ -104,7 +108,7 @@ pub fn many(
   use state, succ, fail <- Parser
 
   case many_loop(p, state, []) {
-    Ok(#(state, xs)) -> succ(state, xs)
+    Ok(#(state, xs)) -> succ(state, list.reverse(xs))
     Error(#(state, msg)) -> fail(state, msg)
   }
 }

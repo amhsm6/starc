@@ -79,7 +79,7 @@ pub fn parse_if_test() {
     )
 
     parse_if().run(
-      parser.Unconsumed(tokens),
+      parser.begin(tokens),
       fn(state, x) { Ok(#(state, x)) },
       fn(_, x) { Error(x) },
     )
@@ -98,7 +98,7 @@ pub fn parse_if_test() {
     )
 
     parse_if().run(
-      parser.Unconsumed(tokens),
+      parser.begin(tokens),
       fn(state, x) { Ok(#(state, x)) },
       fn(_, x) { Error(x) },
     )
@@ -114,7 +114,7 @@ pub fn parse_if_test() {
     )
 
     parse_if().run(
-      parser.Unconsumed(tokens),
+      parser.begin(tokens),
       fn(state, x) { Ok(#(state, x)) },
       fn(_, x) { Error(x) },
     )
@@ -135,7 +135,7 @@ pub fn many_test() {
     )
 
     parse_numbers().run(
-      parser.Unconsumed(tokens),
+      parser.begin(tokens),
       fn(state, x) { Ok(#(state, x)) },
       fn(_, x) { Error(x) },
     )
@@ -155,7 +155,7 @@ pub fn many_test() {
     )
 
     parse_equals().run(
-      parser.Unconsumed(tokens),
+      parser.begin(tokens),
       fn(state, x) { Ok(#(state, x)) },
       fn(_, x) { Error(x) },
     )
@@ -178,7 +178,7 @@ pub fn many_test() {
     )
 
     parse_equals().run(
-      parser.Unconsumed(tokens),
+      parser.begin(tokens),
       fn(state, x) { Ok(#(state, x)) },
       fn(_, x) { Error(x) },
     )

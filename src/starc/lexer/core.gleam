@@ -1,3 +1,5 @@
+import gleam/list
+
 pub type Lexer(a, r) {
   Lexer(run: fn(LexerState, fn(LexerState, a) -> r, fn() -> r) -> r)
 }
@@ -44,7 +46,7 @@ pub fn many(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
   use state, succ, _ <- Lexer
 
   let #(state, xs) = many_loop(l, state, [])
-  succ(state, xs)
+  succ(state, list.reverse(xs))
 }
 
 fn many_loop(
