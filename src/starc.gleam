@@ -18,7 +18,7 @@ pub fn main() {
     )
 
     use tokens <- result.try(
-      lexer.lex(input)
+      lexer.lex_program(input)
       |> result.map_error(LexerError),
     )
 

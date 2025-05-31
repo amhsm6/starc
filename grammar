@@ -1,0 +1,14 @@
+Program = TopLevelDeclaration*
+
+TopLevelDeclaration = FuncDecl
+
+FuncDecl = "func" Ident Signature Block
+Signature = Parameters Type?
+Parameters = "(" ParameterList ")"
+ParameterList = { ParameterDecl, }*
+ParameterDecl = { Ident, }* Type
+
+Block = "{" Statement* "}"
+Statement = "if"
+
+Ident = ( 'a-z' | 'A-Z' | '_' ) ( 'a-z' | 'A-Z' | '0-9' | '_' )*

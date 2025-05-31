@@ -130,23 +130,17 @@ fn token() -> Lexer(Option(Token), r) {
   fail()
 }
 
-pub fn lex(input: String) -> Result(List(Token), LexerError) {
-  let l = lexer.many(token())
+pub fn lex_program(input: String) -> Result(List(Token), LexerError) {
+  let assert Some(#(state, tokens)) = lexer.lex(lexer.many(token()), input)
 
-  l.run(
-    LexerState(input, lexer.begin()),
-    fn(state, tokens) {
-      let tokens =
-        option.values(tokens)
-        |> list.append([token.TokenEOF])
+  let tokens =
+    option.values(tokens)
+    |> list.append([token.TokenEOF])
 
-      case state {
-        LexerState("", _) -> Ok(tokens)
-        LexerState(input, pos) -> {
-          Error(UnexpectedToken(pos, string.slice(input, 0, 5)))
-        }
-      }
-    },
-    fn() { panic },
-  )
+  case state {
+    LexerState("", _) -> Ok(tokens)
+    LexerState(input, pos) -> {
+      Error(UnexpectedToken(pos, string.slice(input, 0, 5)))
+    }
+  }
 }

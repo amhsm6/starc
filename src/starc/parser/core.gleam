@@ -15,10 +15,6 @@ pub type ParserState {
   Consumed(input: List(Token))
 }
 
-pub fn begin(input: List(Token)) -> ParserState {
-  Unconsumed(input)
-}
-
 fn unconsume(state: ParserState) -> ParserState {
   case state {
     Unconsumed(_) -> state
@@ -130,34 +126,52 @@ fn many_loop(
   )
 }
 
-pub fn many_sep(p: Parser(a, r), sep: Parser(b, r)) -> Parser(List(a), r) {
+pub fn sep_by(
+  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
+  sep: Parser(b, Result(#(ParserState, List(a)), #(ParserState, String))),
+) -> Parser(List(a), r) {
   use state, succ, fail <- Parser
 
+  case sep_by_loop(p, sep, state, []) {
+    Ok(#(state, xs)) -> succ(state, list.reverse(xs))
+    Error(#(state, msg)) -> fail(state, msg)
+  }
+}
+
+fn sep_by_loop(
+  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
+  sep: Parser(b, Result(#(ParserState, List(a)), #(ParserState, String))),
+  state: ParserState,
+  result: List(a),
+) -> Result(#(ParserState, List(a)), #(ParserState, String)) {
   maybe(p).run(
     state,
     fn(state, parsed_x) {
       case parsed_x {
-        None -> succ(state, [])
+        None -> Ok(#(state, result))
         Some(x) -> {
           maybe(sep).run(
             state,
             fn(state, parsed_sep) {
               case parsed_sep {
-                None -> succ(state, [x])
-                Some(_) -> {
-                  many_sep(p, sep).run(
-                    state,
-                    fn(state, xs) { succ(state, [x, ..xs]) },
-                    fail,
-                  )
-                }
+                None -> Ok(#(state, [x, ..result]))
+                Some(_) -> sep_by_loop(p, sep, state, [x, ..result])
               }
             },
-            fail,
+            fn(state, msg) { Error(#(state, msg)) },
           )
         }
       }
     },
-    fail,
+    fn(state, msg) { Error(#(state, msg)) },
   )
+}
+
+pub fn parse(
+  p: Parser(a, Result(#(ParserState, a), #(ParserState, String))),
+  tokens: List(Token),
+) -> Result(#(ParserState, a), #(ParserState, String)) {
+  p.run(Unconsumed(tokens), fn(state, x) { Ok(#(state, x)) }, fn(state, msg) {
+    Error(#(state, msg))
+  })
 }

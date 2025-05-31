@@ -3,7 +3,7 @@ import gleeunit/should
 
 import starc/lexer
 import starc/lexer/token.{type Token}
-import starc/parser/core.{type Parser} as parser
+import starc/parser/core.{type Parser, type ParserState} as parser
 
 fn parse_eq() -> Parser(Token, r) {
   use t <- parser.perform(parser.eat_exact(token.TokenEquals))
@@ -57,11 +57,11 @@ pub fn parse_numbers() -> Parser(List(Int), r) {
       parser.pure(n)
     })
 
-  parser.many_sep(p, parser.eat_exact(token.TokenPlus))
+  parser.sep_by(p, parser.eat_exact(token.TokenPlus))
 }
 
 pub fn parse_equals() -> Parser(List(Token), r) {
-  parser.many_sep(
+  parser.sep_by(
     parser.oneof([parse_eq(), parse_neq()], "expected == or !="),
     parser.eat_exact(token.TokenPlus),
   )
@@ -69,20 +69,16 @@ pub fn parse_equals() -> Parser(List(Token), r) {
 
 type GeneralError {
   LexerError(lexer.LexerError)
-  ParserError(String)
+  ParserError(#(ParserState, String))
 }
 
 pub fn parse_if_test() {
   let res = {
     use tokens <- result.try(
-      lexer.lex("if (!=fn *    })") |> result.map_error(LexerError),
+      lexer.lex_program("if (!=fn *    })") |> result.map_error(LexerError),
     )
 
-    parse_if().run(
-      parser.begin(tokens),
-      fn(state, x) { Ok(#(state, x)) },
-      fn(_, x) { Error(x) },
-    )
+    parser.parse(parse_if(), tokens)
     |> result.map_error(ParserError)
   }
 
@@ -94,30 +90,24 @@ pub fn parse_if_test() {
 
   let res = {
     use tokens <- result.try(
-      lexer.lex("if   ( =={") |> result.map_error(LexerError),
+      lexer.lex_program("if   ( =={") |> result.map_error(LexerError),
     )
 
-    parse_if().run(
-      parser.begin(tokens),
-      fn(state, x) { Ok(#(state, x)) },
-      fn(_, x) { Error(x) },
-    )
+    parser.parse(parse_if(), tokens)
     |> result.map_error(ParserError)
   }
 
   should.be_error(res)
-  |> should.equal(ParserError("Expected }"))
+  |> should.equal(
+    ParserError(#(parser.Consumed([token.TokenEOF]), "Expected }")),
+  )
 
   let res = {
     use tokens <- result.try(
-      lexer.lex("if (!=fn *    })") |> result.map_error(LexerError),
+      lexer.lex_program("if (!=fn *    })") |> result.map_error(LexerError),
     )
 
-    parse_if().run(
-      parser.begin(tokens),
-      fn(state, x) { Ok(#(state, x)) },
-      fn(_, x) { Error(x) },
-    )
+    parser.parse(parse_if(), tokens)
     |> result.map_error(ParserError)
   }
 
@@ -131,14 +121,11 @@ pub fn parse_if_test() {
 pub fn many_test() {
   let res = {
     use tokens <- result.try(
-      lexer.lex("12321 + 43+ 324 +4+5345+1+++") |> result.map_error(LexerError),
+      lexer.lex_program("12321 + 43+ 324 +4+5345+1+++")
+      |> result.map_error(LexerError),
     )
 
-    parse_numbers().run(
-      parser.begin(tokens),
-      fn(state, x) { Ok(#(state, x)) },
-      fn(_, x) { Error(x) },
-    )
+    parser.parse(parse_numbers(), tokens)
     |> result.map_error(ParserError)
   }
 
@@ -151,14 +138,11 @@ pub fn many_test() {
 
   let res = {
     use tokens <- result.try(
-      lexer.lex("=={}+!=fn*+=={}+=={}+!=fn*") |> result.map_error(LexerError),
+      lexer.lex_program("=={}+!=fn*+=={}+=={}+!=fn*")
+      |> result.map_error(LexerError),
     )
 
-    parse_equals().run(
-      parser.begin(tokens),
-      fn(state, x) { Ok(#(state, x)) },
-      fn(_, x) { Error(x) },
-    )
+    parser.parse(parse_equals(), tokens)
     |> result.map_error(ParserError)
   }
 
@@ -172,19 +156,29 @@ pub fn many_test() {
       token.TokenNotEquals,
     ]),
   )
+
   let res = {
     use tokens <- result.try(
-      lexer.lex("=={}+!=fn*+=={}+==}+!=fn*") |> result.map_error(LexerError),
+      lexer.lex_program("=={}+!=fn*+=={}+==}+!=fn*")
+      |> result.map_error(LexerError),
     )
 
-    parse_equals().run(
-      parser.begin(tokens),
-      fn(state, x) { Ok(#(state, x)) },
-      fn(_, x) { Error(x) },
-    )
+    parser.parse(parse_equals(), tokens)
     |> result.map_error(ParserError)
   }
 
   should.be_error(res)
-  |> should.equal(ParserError("Expected {"))
+  |> should.equal(
+    ParserError(#(
+      parser.Consumed([
+        token.TokenRBrace,
+        token.TokenPlus,
+        token.TokenNotEquals,
+        token.TokenFn,
+        token.TokenStar,
+        token.TokenEOF,
+      ]),
+      "Expected {",
+    )),
+  )
 }

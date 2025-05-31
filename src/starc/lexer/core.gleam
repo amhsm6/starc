@@ -1,4 +1,5 @@
 import gleam/list
+import gleam/option.{type Option, None, Some}
 
 pub type Lexer(a, r) {
   Lexer(run: fn(LexerState, fn(LexerState, a) -> r, fn() -> r) -> r)
@@ -10,10 +11,6 @@ pub type LexerState {
 
 pub type Pos {
   Pos(line: Int, char: Int)
-}
-
-pub fn begin() -> Pos {
-  Pos(1, 1)
 }
 
 pub fn advance_chars(pos: Pos, n: Int) -> Pos {
@@ -65,4 +62,13 @@ pub fn some(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
     [] -> die()
     xs -> pure(xs)
   }
+}
+
+pub fn lex(
+  l: Lexer(a, Option(#(LexerState, a))),
+  input: String,
+) -> Option(#(LexerState, a)) {
+  l.run(LexerState(input, Pos(1, 1)), fn(state, x) { Some(#(state, x)) }, fn() {
+    None
+  })
 }
