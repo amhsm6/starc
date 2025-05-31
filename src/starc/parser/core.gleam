@@ -98,15 +98,31 @@ pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
   )
 }
 
-pub fn many(p: Parser(a, r)) -> Parser(List(a), r) {
+pub fn many(
+  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
+) -> Parser(List(a), r) {
   use state, succ, fail <- Parser
 
-  p.run(
+  case many_loop(p, state, []) {
+    Ok(#(state, xs)) -> succ(state, xs)
+    Error(#(state, msg)) -> fail(state, msg)
+  }
+}
+
+fn many_loop(
+  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
+  state: ParserState,
+  result: List(a),
+) -> Result(#(ParserState, List(a)), #(ParserState, String)) {
+  maybe(p).run(
     state,
     fn(state, x) {
-      many(p).run(state, fn(state, xs) { succ(state, [x, ..xs]) }, fail)
+      case x {
+        None -> Ok(#(state, result))
+        Some(x) -> many_loop(p, state, [x, ..result])
+      }
     },
-    fn(state, _) { succ(state, []) },
+    fn(state, msg) { Error(#(state, msg)) },
   )
 }
 

@@ -40,19 +40,24 @@ pub fn die() -> Lexer(a, r) {
   Lexer(fn(_, _, fail) { fail() })
 }
 
-pub fn many(l: Lexer(a, r)) -> Lexer(List(a), r) {
-  use state, succ, fail <- Lexer
+pub fn many(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
+  use state, succ, _ <- Lexer
 
-  l.run(
-    state,
-    fn(state, x) {
-      many(l).run(state, fn(state, xs) { succ(state, [x, ..xs]) }, fail)
-    },
-    fn() { succ(state, []) },
-  )
+  let #(state, xs) = many_loop(l, state, [])
+  succ(state, xs)
 }
 
-pub fn some(l: Lexer(a, r)) -> Lexer(List(a), r) {
+fn many_loop(
+  l: Lexer(a, #(LexerState, List(a))),
+  state: LexerState,
+  result: List(a),
+) -> #(LexerState, List(a)) {
+  l.run(state, fn(state, x) { many_loop(l, state, [x, ..result]) }, fn() {
+    #(state, result)
+  })
+}
+
+pub fn some(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
   use xs <- perform(many(l))
   case xs {
     [] -> die()
