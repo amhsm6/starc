@@ -36,7 +36,7 @@ fn parse_if() -> Parser(Nil, r) {
     |> parser.with_message("Expected token LParen"),
   )
 
-  use token <- parser.perform(parser.oneof(
+  use _ <- parser.perform(parser.oneof(
     [parse_eq(), parse_neq()],
     "Expected == or !=",
   ))

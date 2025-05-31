@@ -29,6 +29,9 @@ fn symbol() -> Lexer(Option(Token), r) {
       succ(LexerState(rest, lexer.advance_line(pos)), None)
     }
 
+    "," <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenComma))
+
     "(" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLParen))
     ")" <> rest ->
@@ -131,7 +134,8 @@ fn token() -> Lexer(Option(Token), r) {
 }
 
 pub fn lex_program(input: String) -> Result(List(Token), LexerError) {
-  let assert Some(#(state, tokens)) = lexer.lex(lexer.many(token()), input)
+  let l = lexer.many(token())
+  let assert Some(#(state, tokens)) = lexer.lex(l, input)
 
   let tokens =
     option.values(tokens)

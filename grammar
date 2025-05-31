@@ -2,7 +2,7 @@ Program = TopLevelDeclaration*
 
 TopLevelDeclaration = FuncDecl
 
-FuncDecl = "func" Ident Signature Block
+FuncDecl = "fn" Ident Signature Block
 Signature = Parameters Type?
 Parameters = "(" ParameterList ")"
 ParameterList = { ParameterDecl, }*

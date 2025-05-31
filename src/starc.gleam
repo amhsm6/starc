@@ -2,12 +2,13 @@ import gleam/io
 import gleam/result
 import gleam/string
 import simplifile
-
 import starc/lexer
+import starc/parser
 
 type Error {
   FileError(simplifile.FileError)
   LexerError(lexer.LexerError)
+  ParserError(String)
 }
 
 pub fn main() {
@@ -22,13 +23,16 @@ pub fn main() {
       |> result.map_error(LexerError),
     )
 
-    io.println("Successfully parsed: " <> string.inspect(tokens))
+    use tree <- result.try(
+      parser.parse_program(tokens)
+      |> result.map_error(ParserError),
+    )
 
-    Ok(Nil)
+    Ok(tree)
   }
 
   case res {
-    Ok(_) -> Nil
+    Ok(program) -> io.println(string.inspect(program))
     Error(err) -> io.println("Error: " <> string.inspect(err))
   }
 }

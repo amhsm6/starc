@@ -2,6 +2,8 @@ pub type Token {
   TokenIdent(String)
   TokenInt(Int)
 
+  TokenComma
+
   TokenLParen
   TokenRParen
   TokenPlus
