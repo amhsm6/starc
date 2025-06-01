@@ -7,30 +7,30 @@ import starc/parser/ast
 import starc/parser/core.{type Parser} as parser
 
 fn parse_ident() -> Parser(ast.Identifier, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- parser.perform(parser.eat(
+    fn(t) {
       case t {
         token.TokenIdent(_) -> True
         _ -> False
       }
-    })
-    |> parser.with_message("Expected identifier"),
-  )
+    },
+    "Expected identifier",
+  ))
 
   let assert token.TokenIdent(id) = t
   parser.pure(id)
 }
 
 fn parse_int() -> Parser(ast.Expression, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- parser.perform(parser.eat(
+    fn(t) {
       case t {
         token.TokenInt(_) -> True
         _ -> False
       }
-    })
-    |> parser.with_message("Expected integer"),
-  )
+    },
+    "Expected integer",
+  ))
 
   let assert token.TokenInt(n) = t
   parser.pure(ast.IntExpr(n))
@@ -41,8 +41,8 @@ fn parse_expression() -> Parser(ast.Expression, r) {
 
   use next <- parser.perform(
     parser.many({
-      use t <- parser.perform(
-        parser.eat(fn(t) {
+      use t <- parser.perform(parser.eat(
+        fn(t) {
           case t {
             token.TokenEquals -> True
             token.TokenNotEquals -> True
@@ -52,16 +52,17 @@ fn parse_expression() -> Parser(ast.Expression, r) {
             token.TokenGE -> True
             _ -> False
           }
-        }),
-      )
+        },
+        "Expected bool operation",
+      ))
       use e <- parser.perform(parse_additive_expression())
       parser.pure(#(t, e))
     }),
   )
 
   parser.pure(
-    list.fold(next, expr, fn(e1, item) {
-      let #(token, e2) = item
+    list.fold(next, expr, fn(e1, x) {
+      let #(token, e2) = x
       case token {
         token.TokenEquals -> ast.EQExpr(e1, e2)
         token.TokenNotEquals -> ast.NEQExpr(e1, e2)
@@ -80,15 +81,16 @@ fn parse_additive_expression() -> Parser(ast.Expression, r) {
 
   use next <- parser.perform(
     parser.many({
-      use t <- parser.perform(
-        parser.eat(fn(t) {
+      use t <- parser.perform(parser.eat(
+        fn(t) {
           case t {
             token.TokenPlus -> True
             token.TokenMinus -> True
             _ -> False
           }
-        }),
-      )
+        },
+        "Expected additive operation",
+      ))
       use e <- parser.perform(parse_multiplicative_expression())
       parser.pure(#(t, e))
     }),
@@ -111,15 +113,16 @@ fn parse_multiplicative_expression() -> Parser(ast.Expression, r) {
 
   use next <- parser.perform(
     parser.many({
-      use t <- parser.perform(
-        parser.eat(fn(t) {
+      use t <- parser.perform(parser.eat(
+        fn(t) {
           case t {
             token.TokenStar -> True
             token.TokenSlash -> True
             _ -> False
           }
-        }),
-      )
+        },
+        "Expected multiplicative operation",
+      ))
       use e <- parser.perform(parse_primary_expression())
       parser.pure(#(t, e))
     }),
@@ -154,13 +157,9 @@ fn parse_statement() -> Parser(ast.Statement, r) {
 }
 
 fn parse_block() -> Parser(ast.Block, r) {
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenLBrace) |> parser.with_message("Expected {"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenLBrace))
   use statements <- parser.perform(parser.many(parse_statement()))
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenRBrace) |> parser.with_message("Expected }"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenRBrace))
   parser.pure(statements)
 }
 
@@ -169,35 +168,23 @@ fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.Type)), r) {
     parse_ident(),
     parser.eat_exact(token.TokenComma),
   ))
-  use ty <- parser.perform(
-    parse_ident() |> parser.with_message("Expected type"),
-  )
+  use ty <- parser.perform(parse_ident())
   parser.pure(list.map(names, pair.new(_, ty)))
 }
 
 fn parse_function_declaration() -> Parser(ast.Declaration, r) {
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenFn) |> parser.with_message("Expected fn"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenFn))
 
-  use name <- parser.perform(
-    parse_ident() |> parser.with_message("Expected identifier"),
-  )
+  use name <- parser.perform(parse_ident())
 
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenLParen) |> parser.with_message("Expected ("),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
   use params <- parser.perform(parser.sep_by(
     parse_parameter(),
     parser.eat_exact(token.TokenComma),
   ))
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenRParen) |> parser.with_message("Expected )"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenRParen))
 
-  use ret <- parser.perform(
-    parse_ident() |> parser.with_message("Expected type") |> parser.maybe(),
-  )
+  use ret <- parser.perform(parser.maybe(parse_ident()))
 
   use body <- parser.perform(parse_block())
 

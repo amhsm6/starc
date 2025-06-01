@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
 
 import starc/lexer/token.{type Token}
 
@@ -22,29 +23,29 @@ fn unconsume(state: ParserState) -> ParserState {
   }
 }
 
-pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
+pub fn eat(pred: fn(Token) -> Bool, msg: String) -> Parser(Token, r) {
   use state, succ, fail <- Parser
 
   case state {
     Unconsumed([t, ..rest]) -> {
       case pred(t) {
         True -> succ(Consumed(rest), t)
-        False -> fail(state, "no match")
+        False -> fail(state, msg)
       }
     }
     Consumed([t, ..rest]) -> {
       case pred(t) {
         True -> succ(Consumed(rest), t)
-        False -> fail(state, "no match")
+        False -> fail(state, msg)
       }
     }
-    Unconsumed([]) -> fail(state, "eof")
-    Consumed([]) -> fail(state, "eof")
+    Unconsumed([]) -> fail(state, msg)
+    Consumed([]) -> fail(state, msg)
   }
 }
 
 pub fn eat_exact(t: Token) -> Parser(Token, r) {
-  eat(fn(x) { x == t })
+  eat(fn(x) { x == t }, "Expected " <> string.inspect(t))
 }
 
 pub fn pure(value: a) -> Parser(a, r) {
@@ -58,11 +59,6 @@ pub fn die(message: String) -> Parser(a, r) {
 pub fn perform(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
   use state, succ, fail <- Parser
   p.run(state, fn(state, x) { f(x).run(state, succ, fail) }, fail)
-}
-
-pub fn with_message(p: Parser(a, r), msg: String) -> Parser(a, r) {
-  use state, succ, fail <- Parser
-  p.run(state, succ, fn(state, _) { fail(state, msg) })
 }
 
 pub fn oneof(parsers: List(Parser(a, r)), nomatch_msg: String) -> Parser(a, r) {

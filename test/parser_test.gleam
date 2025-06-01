@@ -7,34 +7,21 @@ import starc/parser/core.{type Parser, type ParserState} as parser
 
 fn parse_eq() -> Parser(Token, r) {
   use t <- parser.perform(parser.eat_exact(token.TokenEquals))
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenLBrace) |> parser.with_message("Expected {"),
-  )
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenRBrace) |> parser.with_message("Expected }"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenLBrace))
+  use _ <- parser.perform(parser.eat_exact(token.TokenRBrace))
   parser.pure(t)
 }
 
 fn parse_neq() -> Parser(Token, r) {
   use t <- parser.perform(parser.eat_exact(token.TokenNotEquals))
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenFn) |> parser.with_message("Expected fn"),
-  )
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenStar) |> parser.with_message("Expected *"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenFn))
+  use _ <- parser.perform(parser.eat_exact(token.TokenStar))
   parser.pure(t)
 }
 
 fn parse_if() -> Parser(Nil, r) {
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenIf) |> parser.with_message("Expected token IF"),
-  )
-  use _ <- parser.perform(
-    parser.eat_exact(token.TokenLParen)
-    |> parser.with_message("Expected token LParen"),
-  )
+  use _ <- parser.perform(parser.eat_exact(token.TokenIf))
+  use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
 
   use _ <- parser.perform(parser.oneof(
     [parse_eq(), parse_neq()],
@@ -46,12 +33,15 @@ fn parse_if() -> Parser(Nil, r) {
 
 pub fn parse_numbers() -> Parser(List(Int), r) {
   let p =
-    parser.eat(fn(t) {
-      case t {
-        token.TokenInt(_) -> True
-        _ -> False
-      }
-    })
+    parser.eat(
+      fn(t) {
+        case t {
+          token.TokenInt(_) -> True
+          _ -> False
+        }
+      },
+      "Expected int",
+    )
     |> parser.perform(fn(t) {
       let assert token.TokenInt(n) = t
       parser.pure(n)
