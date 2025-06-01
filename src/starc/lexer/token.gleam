@@ -18,6 +18,9 @@ pub type Token {
   TokenGT
   TokenGE
 
+  TokenBang
+  TokenAmpersand
+
   TokenLBrace
   TokenRBrace
 

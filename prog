@@ -2,6 +2,8 @@ fn one(a, b c, bool, c, int x) {
   123 + (1) * 312312 - 114 / 1414 == 123123 * (13123 - ((324124))) <= ((12323 + (3123 - 1314) > 123123))
   123
 }
-fn two(a, int, b float, c int,) {}
+fn two(a, int, b float, c int,) {
+    !(12323 + &1434) * *1 / 100
+}
 fn three(a,bint,c f) float {}
 fn four() {}

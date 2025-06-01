@@ -40,4 +40,8 @@ pub type Expression {
   LEExpr(Expression, Expression)
   GTExpr(Expression, Expression)
   GEExpr(Expression, Expression)
+
+  NotExpr(Expression)
+  AddrOfExpr(Expression)
+  DerefExpr(Expression)
 }

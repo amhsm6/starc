@@ -17,7 +17,12 @@ Expression = AddExpr { { "==" | "!=" | "<" | "<=" | ">" | ">=" } AddExpr }*
 AddExpr = MulExpr { { "+" | "-" } MulExpr }*
 MulExpr = PrimaryExpr { { "*" | "/" } PrimaryExpr }*
 PrimaryExpr = "(" Expression ")"
+  | UnaryExpr
   | IntExpr
   | BoolExpr
+
+UnaryExpr = "!" Expression
+  | "&" Expression
+  | "*" Expression
 
 Ident = ( 'a-z' | 'A-Z' | '_' ) ( 'a-z' | 'A-Z' | '0-9' | '_' )*

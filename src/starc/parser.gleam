@@ -148,7 +148,34 @@ fn parse_nested_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_primary_expression() -> Parser(ast.Expression, r) {
-  parser.oneof([parse_nested_expression(), parse_int()], "expected expression")
+  parser.oneof(
+    [
+      parse_nested_expression(),
+      parse_not_expression(),
+      parse_addrof_expression(),
+      parse_deref_expression(),
+      parse_int(),
+    ],
+    "expected expression",
+  )
+}
+
+fn parse_not_expression() -> Parser(ast.Expression, r) {
+  use _ <- parser.perform(parser.eat_exact(token.TokenBang))
+  use expr <- parser.perform(parse_expression())
+  parser.pure(ast.NotExpr(expr))
+}
+
+fn parse_addrof_expression() -> Parser(ast.Expression, r) {
+  use _ <- parser.perform(parser.eat_exact(token.TokenAmpersand))
+  use expr <- parser.perform(parse_primary_expression())
+  parser.pure(ast.AddrOfExpr(expr))
+}
+
+fn parse_deref_expression() -> Parser(ast.Expression, r) {
+  use _ <- parser.perform(parser.eat_exact(token.TokenStar))
+  use expr <- parser.perform(parse_primary_expression())
+  parser.pure(ast.DerefExpr(expr))
 }
 
 fn parse_statement() -> Parser(ast.Statement, r) {

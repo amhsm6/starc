@@ -67,6 +67,14 @@ fn symbol() -> Lexer(Option(Token), r) {
       )
     }
 
+    "!" <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenBang))
+    "&" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_char(pos)),
+        Some(token.TokenAmpersand),
+      )
+
     "{" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLBrace))
     "}" <> rest ->
