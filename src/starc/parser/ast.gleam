@@ -20,14 +20,18 @@ pub type Block =
 
 pub type Statement {
   EvalStatement(Expression)
+  DefineStatement(name: Expression, ty: Option(Type), expr: Expression)
+  AssignStatement(cell: Expression, expr: Expression)
 }
 
 pub type Type =
-  String
+  Identifier
 
 pub type Expression {
   IntExpr(Int)
   BoolExpr(Bool)
+  StringExpr(String)
+  VarExpr(Identifier)
 
   AddExpr(Expression, Expression)
   SubExpr(Expression, Expression)

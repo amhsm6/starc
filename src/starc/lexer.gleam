@@ -29,13 +29,21 @@ fn symbol() -> Lexer(Option(Token), r) {
       succ(LexerState(rest, lexer.advance_line(pos)), None)
     }
 
-    "," <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenComma))
-
     "(" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLParen))
     ")" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenRParen))
+    "{" <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLBrace))
+    "}" <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenRBrace))
+
+    "!=" <> rest -> {
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 2)),
+        Some(token.TokenNotEquals),
+      )
+    }
 
     "+" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenPlus))
@@ -45,28 +53,8 @@ fn symbol() -> Lexer(Option(Token), r) {
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenStar))
     "/" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenSlash))
-
-    "==" <> rest -> {
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 2)),
-        Some(token.TokenEquals),
-      )
-    }
-    "<=" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenLE))
-    "<" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLT))
-    ">=" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenGE))
-    ">" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenGT))
-    "!=" <> rest -> {
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 2)),
-        Some(token.TokenNotEquals),
-      )
-    }
-
+    "," <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenComma))
     "!" <> rest ->
       succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenBang))
     "&" <> rest ->
@@ -75,10 +63,30 @@ fn symbol() -> Lexer(Option(Token), r) {
         Some(token.TokenAmpersand),
       )
 
-    "{" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLBrace))
-    "}" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenRBrace))
+    "==" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 2)),
+        Some(token.TokenEquals),
+      )
+    "<=" <> rest ->
+      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenLE))
+    "<" <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLT))
+    ">=" <> rest ->
+      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenGE))
+    ">" <> rest ->
+      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenGT))
+
+    ":=" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 2)),
+        Some(token.TokenDefine),
+      )
+    "=" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 2)),
+        Some(token.TokenAssign),
+      )
 
     "if" <> rest ->
       succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenIf))
@@ -100,7 +108,7 @@ fn char_in_set(s: Set(String)) -> Lexer(String, r) {
     }
   }
 
-  result.unwrap(res, fail())
+  result.lazy_unwrap(res, fail)
 }
 
 fn ident() -> Lexer(Option(Token), r) {
@@ -123,7 +131,7 @@ fn digit() -> Lexer(Int, r) {
     Ok(succ(LexerState(rest, lexer.advance_char(pos)), digit))
   }
 
-  result.unwrap(res, fail())
+  result.lazy_unwrap(res, fail)
 }
 
 fn int() -> Lexer(Option(Token), r) {
@@ -132,11 +140,53 @@ fn int() -> Lexer(Option(Token), r) {
   lexer.pure(Some(token.TokenInt(num)))
 }
 
+fn bool() -> Lexer(Option(Token), r) {
+  use LexerState(input, pos), succ, fail <- Lexer
+
+  case input {
+    "true" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 4)),
+        Some(token.TokenBool(True)),
+      )
+
+    "false" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 5)),
+        Some(token.TokenBool(False)),
+      )
+
+    _ -> fail()
+  }
+}
+
+fn string() -> Lexer(Option(Token), r) {
+  use LexerState(input, pos), succ, fail <- Lexer
+
+  let res = {
+    use #(str, rest) <- result.try(case input {
+      "\"" <> rest -> {
+        string.split_once(rest, "\"")
+      }
+      _ -> Error(Nil)
+    })
+
+    Ok(succ(
+      LexerState(rest, lexer.advance_chars(pos, string.length(str) + 2)),
+      Some(token.TokenString(str)),
+    ))
+  }
+
+  result.lazy_unwrap(res, fail)
+}
+
 fn token() -> Lexer(Option(Token), r) {
   use state, succ, fail <- Lexer
 
   use <- symbol().run(state, succ)
   use <- int().run(state, succ)
+  use <- bool().run(state, succ)
+  use <- string().run(state, succ)
   use <- ident().run(state, succ)
   fail()
 }

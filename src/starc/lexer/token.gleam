@@ -1,15 +1,22 @@
 pub type Token {
   TokenIdent(String)
-  TokenInt(Int)
 
-  TokenComma
+  TokenInt(Int)
+  TokenBool(Bool)
+  TokenString(String)
 
   TokenLParen
   TokenRParen
+  TokenLBrace
+  TokenRBrace
+
   TokenPlus
   TokenMinus
   TokenStar
   TokenSlash
+  TokenComma
+  TokenBang
+  TokenAmpersand
 
   TokenEquals
   TokenNotEquals
@@ -18,11 +25,8 @@ pub type Token {
   TokenGT
   TokenGE
 
-  TokenBang
-  TokenAmpersand
-
-  TokenLBrace
-  TokenRBrace
+  TokenDefine
+  TokenAssign
 
   TokenIf
   TokenFn
