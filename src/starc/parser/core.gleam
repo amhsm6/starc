@@ -1,173 +1,149 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/string
 
 import starc/lexer/token.{type Token}
 
 pub type Parser(a, r) {
   Parser(
-    run: fn(ParserState, fn(ParserState, a) -> r, fn(ParserState, String) -> r) ->
+    run: fn(
+      ParserState,
+      fn(a) -> r,
+      fn(ParserState, a) -> r,
+      fn(String) -> r,
+      fn(ParserState, String) -> r,
+    ) ->
       r,
   )
 }
 
-pub type ParserState {
-  Unconsumed(input: List(Token))
-  Consumed(input: List(Token))
+type ParserState =
+  List(Token)
+
+pub opaque type ParserResult(a) {
+  OkEmpty(a)
+  OkConsumed(ParserState, a)
+  FailEmpty(String)
+  FailConsumed(ParserState, String)
 }
 
-fn unconsume(state: ParserState) -> ParserState {
-  case state {
-    Unconsumed(_) -> state
-    Consumed(input) -> Unconsumed(input)
-  }
-}
-
-pub fn eat(pred: fn(Token) -> Bool, msg: String) -> Parser(Token, r) {
-  use state, succ, fail <- Parser
-
-  case state {
-    Unconsumed([t, ..rest]) -> {
-      case pred(t) {
-        True -> succ(Consumed(rest), t)
-        False -> fail(state, msg)
-      }
-    }
-    Consumed([t, ..rest]) -> {
-      case pred(t) {
-        True -> succ(Consumed(rest), t)
-        False -> fail(state, msg)
-      }
-    }
-    Unconsumed([]) -> fail(state, msg)
-    Consumed([]) -> fail(state, msg)
-  }
-}
-
-pub fn eat_exact(t: Token) -> Parser(Token, r) {
-  eat(fn(x) { x == t }, "Expected " <> string.inspect(t))
-}
-
-pub fn pure(value: a) -> Parser(a, r) {
-  Parser(fn(state, succ, _) { succ(state, value) })
-}
-
-pub fn die(message: String) -> Parser(a, r) {
-  Parser(fn(state, _, fail) { fail(state, message) })
+pub fn pure(x: a) -> Parser(a, r) {
+  use _, ok_empty, _, _, _ <- Parser
+  ok_empty(x)
 }
 
 pub fn perform(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
-  use state, succ, fail <- Parser
-  p.run(state, fn(state, x) { f(x).run(state, succ, fail) }, fail)
-}
-
-pub fn oneof(parsers: List(Parser(a, r)), nomatch_msg: String) -> Parser(a, r) {
-  use state, succ, fail <- Parser
-
-  let f =
-    list.fold_right(parsers, fn() { fail(state, nomatch_msg) }, fn(next, p) {
-      fn() {
-        p.run(unconsume(state), succ, fn(state, msg) {
-          case state {
-            Consumed(_) -> fail(state, msg)
-            Unconsumed(_) -> next()
-          }
-        })
-      }
-    })
-
-  f()
-}
-
-pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
-  use state, succ, fail <- Parser
+  use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
 
   p.run(
-    unconsume(state),
-    fn(state, x) { succ(state, Some(x)) },
-    fn(fail_state, msg) {
-      case fail_state {
-        Consumed(_) -> fail(fail_state, msg)
-        Unconsumed(_) -> succ(state, None)
-      }
+    state,
+    fn(x) { f(x).run(state, ok_empty, ok_consumed, fail_empty, fail_consumed) },
+    fn(state, x) {
+      f(x).run(
+        state,
+        ok_consumed(state, _),
+        ok_consumed,
+        fail_consumed(state, _),
+        fail_consumed,
+      )
     },
+    fail_empty,
+    fail_consumed,
   )
 }
 
-pub fn many(
-  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
-) -> Parser(List(a), r) {
-  use state, succ, fail <- Parser
+pub fn map(p: Parser(a, r), f: fn(a) -> b) -> Parser(b, r) {
+  perform(p, fn(x) { pure(f(x)) })
+}
 
+pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
+  use state, _, ok_consumed, fail_empty, _ <- Parser
+  case state {
+    [t, ..ts] ->
+      case pred(t) {
+        True -> ok_consumed(ts, t)
+        False -> fail_empty("no match")
+      }
+    _ -> fail_empty("eof")
+  }
+}
+
+pub fn choose(p1: Parser(a, r), p2: Parser(a, r)) -> Parser(a, r) {
+  use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
+
+  p1.run(
+    state,
+    fn(x) {
+      p2.run(
+        state,
+        fn(_) { ok_empty(x) },
+        ok_consumed,
+        fn(_) { ok_empty(x) },
+        fail_consumed,
+      )
+    },
+    ok_consumed,
+    fn(_) { p2.run(state, ok_empty, ok_consumed, fail_empty, fail_consumed) },
+    fail_consumed,
+  )
+}
+
+pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
+  choose(map(p, Some), pure(None))
+}
+
+pub fn oneof(parsers: List(Parser(a, r))) -> Parser(a, r) {
+  let assert [p, ..ps] = parsers
+  list.fold(ps, p, fn(p1, p2) { choose(p1, p2) })
+}
+
+pub fn many(p: Parser(a, ParserResult(List(a)))) -> Parser(List(a), r) {
+  use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
   case many_loop(p, state, []) {
-    Ok(#(state, xs)) -> succ(state, list.reverse(xs))
-    Error(#(state, msg)) -> fail(state, msg)
+    OkEmpty(x) -> ok_empty(list.reverse(x))
+    OkConsumed(state, x) -> ok_consumed(state, list.reverse(x))
+    FailEmpty(msg) -> fail_empty(msg)
+    FailConsumed(state, msg) -> fail_consumed(state, msg)
   }
 }
 
 fn many_loop(
-  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
+  p: Parser(a, ParserResult(List(a))),
   state: ParserState,
   result: List(a),
-) -> Result(#(ParserState, List(a)), #(ParserState, String)) {
-  maybe(p).run(
+) -> ParserResult(List(a)) {
+  p.run(
     state,
-    fn(state, x) {
-      case x {
-        None -> Ok(#(state, result))
-        Some(x) -> many_loop(p, state, [x, ..result])
-      }
-    },
-    fn(state, msg) { Error(#(state, msg)) },
+    fn(x) { many_loop(p, state, [x, ..result]) },
+    fn(state, x) { many_loop(p, state, [x, ..result]) },
+    fn(_) { OkEmpty(result) },
+    fn(state, msg) { FailConsumed(state, msg) },
   )
 }
 
 pub fn sep_by(
-  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
-  sep: Parser(b, Result(#(ParserState, List(a)), #(ParserState, String))),
+  p: Parser(a, ParserResult(List(a))),
+  sep: Parser(b, ParserResult(List(a))),
 ) -> Parser(List(a), r) {
-  use state, succ, fail <- Parser
-
-  case sep_by_loop(p, sep, state, []) {
-    Ok(#(state, xs)) -> succ(state, list.reverse(xs))
-    Error(#(state, msg)) -> fail(state, msg)
-  }
+  many({
+    use x <- perform(p)
+    use _ <- perform(sep)
+    pure(x)
+  })
 }
 
-fn sep_by_loop(
-  p: Parser(a, Result(#(ParserState, List(a)), #(ParserState, String))),
-  sep: Parser(b, Result(#(ParserState, List(a)), #(ParserState, String))),
-  state: ParserState,
-  result: List(a),
-) -> Result(#(ParserState, List(a)), #(ParserState, String)) {
-  maybe(p).run(
-    state,
-    fn(state, parsed_x) {
-      case parsed_x {
-        None -> Ok(#(state, result))
-        Some(x) -> {
-          maybe(sep).run(
-            state,
-            fn(state, parsed_sep) {
-              case parsed_sep {
-                None -> Ok(#(state, [x, ..result]))
-                Some(_) -> sep_by_loop(p, sep, state, [x, ..result])
-              }
-            },
-            fn(state, msg) { Error(#(state, msg)) },
-          )
-        }
-      }
-    },
-    fn(state, msg) { Error(#(state, msg)) },
-  )
+pub fn eat_exact(t: Token) -> Parser(Token, r) {
+  eat(fn(x) { x == t })
 }
 
 pub fn parse(
-  p: Parser(a, Result(#(ParserState, a), #(ParserState, String))),
+  p: Parser(a, Result(#(List(Token), a), #(List(Token), String))),
   tokens: List(Token),
-) -> Result(#(ParserState, a), #(ParserState, String)) {
-  p.run(Unconsumed(tokens), fn(state, x) { Ok(#(state, x)) }, fn(state, msg) {
-    Error(#(state, msg))
-  })
+) -> Result(#(List(Token), a), #(List(Token), String)) {
+  p.run(
+    tokens,
+    fn(x) { Ok(#(tokens, x)) },
+    fn(state, x) { Ok(#(state, x)) },
+    fn(msg) { Error(#(tokens, msg)) },
+    fn(state, msg) { Error(#(state, msg)) },
+  )
 }

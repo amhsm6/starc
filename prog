@@ -1,17 +1,13 @@
-//x float32 := 123
-*y
-x = 23
-
-//fn one(a, b float32, foo bool, c, x int) float64 {
-//  123 + (1) * 312312 - 114 / 1414 == 123123 * (13123 - ((324124))) <= ((12323 + (3123 - 1314) > 123123))
-//  x := 123
-//  y int := 14
-//  Foo float32 := &(213123 + *13123 / 2)
-//  x := "foo" true
-//  y = true
-//}
-//fn two(a, b int) {
-//    !(12323 + &1434) * *1 / 100
-//}
-//fn three(a,bint,c f) float {}
-//fn four() {}
+fn one(a, b float32, foo bool, c, x int) float64 {
+ 123 + (1) * 312312 - 114 / 1414 == 123123 * (13123 - ((324124))) <= ((12323 + (3123 - 1314) > 123123))
+ x := 123
+ y int := 14
+ Foo float32 := &(213123 + *13123 / 2)
+ x := "foo" true
+ y = true
+}
+fn two(a, b int) {
+   !(12323 + &1434) * *1 / 100
+}
+fn three(a,bint,c f) float {}
+fn four() {}

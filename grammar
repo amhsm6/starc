@@ -10,8 +10,11 @@ ParameterDecl = { Ident, }* Type
 
 Block = "{" Statement* "}"
 Statement = EvalStatement
+  | DefStatement
+  | AssignStatement
 
 EvalStatement = Expression
+DefStatement = Ident Type? 
 
 Expression = AddExpr { { "==" | "!=" | "<" | "<=" | ">" | ">=" } AddExpr }*
 AddExpr = MulExpr { { "+" | "-" } MulExpr }*
