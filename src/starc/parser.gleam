@@ -6,6 +6,8 @@ import starc/lexer/token.{type Token}
 import starc/parser/ast
 import starc/parser/core.{type Parser} as parser
 
+// ================= BASIC =================
+
 fn parse_ident() -> Parser(ast.Identifier, r) {
   use t <- parser.perform(
     parser.eat(fn(t) {
@@ -33,6 +35,8 @@ fn parse_type() -> Parser(ast.Type, r) {
   let assert token.TokenIdent(id) = t
   parser.pure(id)
 }
+
+// ================= EXPRESSION =================
 
 fn parse_expression() -> Parser(ast.Expression, r) {
   use expr <- parser.perform(parse_additive_expression())
@@ -220,8 +224,36 @@ fn parse_string() -> Parser(ast.Expression, r) {
   parser.pure(ast.StringExpr(s))
 }
 
+// ================= STATEMENT =================
+
 fn parse_statement() -> Parser(ast.Statement, r) {
-  parser.oneof([parse_define_or_assign_statement(), parse_eval_statement()])
+  parser.oneof([
+    parse_assign_statement(),
+    parse_define_statement(),
+    parse_eval_statement(),
+  ])
+}
+
+fn parse_assign_statement() -> Parser(ast.Statement, r) {
+  use cell <- parser.perform(
+    parser.try({
+      use cell <- parser.perform(
+        parser.oneof([parse_var_expression(), parse_deref_expression()]),
+      )
+      use _ <- parser.perform(parser.eat_exact(token.TokenAssign))
+      parser.pure(cell)
+    }),
+  )
+  use expr <- parser.perform(parse_expression())
+  parser.pure(ast.AssignStatement(cell, expr))
+}
+
+fn parse_define_statement() -> Parser(ast.Statement, r) {
+  use name <- parser.perform(parse_var_expression())
+  use ty <- parser.perform(parser.maybe(parse_type()))
+  use _ <- parser.perform(parser.eat_exact(token.TokenDefine))
+  use expr <- parser.perform(parse_expression())
+  parser.pure(ast.DefineStatement(name, ty, expr))
 }
 
 fn parse_eval_statement() -> Parser(ast.Statement, r) {
@@ -229,37 +261,17 @@ fn parse_eval_statement() -> Parser(ast.Statement, r) {
   parser.pure(ast.EvalStatement(expr))
 }
 
-fn parse_define_or_assign_statement() -> Parser(ast.Statement, r) {
-  parser.oneof([
-    {
-      use name <- parser.perform(parse_var_expression())
-      parser.oneof([parse_define_statement(name), parse_assign_statement(name)])
-    },
-    {
-      use name <- parser.perform(parse_deref_expression())
-      parse_assign_statement(name)
-    },
-  ])
-}
-
-fn parse_define_statement(name: ast.Expression) -> Parser(ast.Statement, r) {
-  use ty <- parser.perform(parser.maybe(parse_type()))
-  use _ <- parser.perform(parser.eat_exact(token.TokenDefine))
-  use expr <- parser.perform(parse_expression())
-  parser.pure(ast.DefineStatement(name, ty, expr))
-}
-
-fn parse_assign_statement(cell: ast.Expression) -> Parser(ast.Statement, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenAssign))
-  use expr <- parser.perform(parse_expression())
-  parser.pure(ast.AssignStatement(cell, expr))
-}
-
 fn parse_block() -> Parser(ast.Block, r) {
   use _ <- parser.perform(parser.eat_exact(token.TokenLBrace))
   use statements <- parser.perform(parser.many(parse_statement()))
   use _ <- parser.perform(parser.eat_exact(token.TokenRBrace))
   parser.pure(statements)
+}
+
+// ================= DECLARATION =================
+
+fn parse_declaration() -> Parser(ast.Declaration, r) {
+  parser.oneof([parse_function_declaration()])
 }
 
 fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.Type)), r) {
@@ -290,14 +302,10 @@ fn parse_function_declaration() -> Parser(ast.Declaration, r) {
   parser.pure(ast.FunctionDeclaration(name, list.flatten(params), ret, body))
 }
 
-fn parse_declaration() -> Parser(ast.Declaration, r) {
-  parser.oneof([parse_function_declaration()])
-}
-
 pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, String) {
   let p = parser.many(parse_declaration())
   case parser.parse(p, tokens) {
-    Ok(#(tokens, tree)) if tokens == [token.TokenEOF] -> Ok(tree)
+    Ok(#([token.TokenEOF], tree)) -> Ok(tree)
     Ok(#(tokens, _)) -> Error("Not parsed: " <> string.inspect(tokens))
     Error(#(tokens, msg)) -> Error(msg <> ": " <> string.inspect(tokens))
   }

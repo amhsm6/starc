@@ -87,18 +87,14 @@ pub fn choose(p1: Parser(a, r), p2: Parser(a, r)) -> Parser(a, r) {
   )
 }
 
-pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
-  choose(map(p, Some), pure(None))
-}
-
-pub fn oneof(parsers: List(Parser(a, r))) -> Parser(a, r) {
-  let assert [p, ..ps] = parsers
-  list.fold(ps, p, fn(p1, p2) { choose(p1, p2) })
+pub fn try(p: Parser(a, r)) -> Parser(a, r) {
+  use state, ok_empty, ok_consumed, fail_empty, _ <- Parser
+  p.run(state, ok_empty, ok_consumed, fail_empty, fn(_, msg) { fail_empty(msg) })
 }
 
 pub fn many(p: Parser(a, ParserResult(List(a)))) -> Parser(List(a), r) {
   use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
-  case many_loop(p, state, []) {
+  case many_loop(p, state, [], False) {
     OkEmpty(x) -> ok_empty(list.reverse(x))
     OkConsumed(state, x) -> ok_consumed(state, list.reverse(x))
     FailEmpty(msg) -> fail_empty(msg)
@@ -110,25 +106,61 @@ fn many_loop(
   p: Parser(a, ParserResult(List(a))),
   state: ParserState,
   result: List(a),
+  consumed: Bool,
 ) -> ParserResult(List(a)) {
   p.run(
     state,
-    fn(x) { many_loop(p, state, [x, ..result]) },
-    fn(state, x) { many_loop(p, state, [x, ..result]) },
-    fn(_) { OkEmpty(result) },
+    fn(x) { many_loop(p, state, [x, ..result], consumed) },
+    fn(state, x) { many_loop(p, state, [x, ..result], True) },
+    fn(_) {
+      case consumed {
+        True -> OkConsumed(state, result)
+        False -> OkEmpty(result)
+      }
+    },
     fn(state, msg) { FailConsumed(state, msg) },
   )
+}
+
+pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
+  choose(map(p, Some), pure(None))
+}
+
+pub fn oneof(parsers: List(Parser(a, r))) -> Parser(a, r) {
+  let assert [p, ..ps] = parsers
+  list.fold(ps, p, fn(p1, p2) { choose(p1, p2) })
+}
+
+fn generalize(p: Parser(a, ParserResult(a))) -> Parser(a, r) {
+  use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
+
+  let res = p.run(state, OkEmpty, OkConsumed, FailEmpty, FailConsumed)
+  case res {
+    OkEmpty(x) -> ok_empty(x)
+    OkConsumed(state, x) -> ok_consumed(state, x)
+    FailEmpty(msg) -> fail_empty(msg)
+    FailConsumed(state, msg) -> fail_consumed(state, msg)
+  }
 }
 
 pub fn sep_by(
   p: Parser(a, ParserResult(List(a))),
   sep: Parser(b, ParserResult(List(a))),
 ) -> Parser(List(a), r) {
-  many({
-    use x <- perform(p)
-    use _ <- perform(sep)
-    pure(x)
-  })
+  generalize(choose(
+    {
+      use x <- perform(p)
+      use xs <- perform(
+        many({
+          use _ <- perform(sep)
+          use y <- perform(p)
+          pure(y)
+        }),
+      )
+      pure([x, ..xs])
+    },
+    pure([]),
+  ))
 }
 
 pub fn eat_exact(t: Token) -> Parser(Token, r) {
