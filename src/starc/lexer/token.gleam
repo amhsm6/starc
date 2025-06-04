@@ -31,5 +31,6 @@ pub type Token {
   TokenIf
   TokenFn
 
+  TokenNewline
   TokenEOF
 }

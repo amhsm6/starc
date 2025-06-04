@@ -2,14 +2,14 @@ import gleam/io
 import gleam/result
 import gleam/string
 import simplifile
+
 import starc/lexer
 import starc/parser
-import starc/parser/core
 
 type Error {
   FileError(simplifile.FileError)
   LexerError(lexer.LexerError)
-  ParserError(core.Message)
+  ParserError(String)
 }
 
 pub fn main() {

@@ -19,7 +19,8 @@ fn symbol() -> Lexer(Option(Token), r) {
 
   case input {
     " " <> rest -> succ(LexerState(rest, lexer.advance_char(pos)), None)
-    "\n" <> rest -> succ(LexerState(rest, lexer.advance_line(pos)), None)
+    "\n" <> rest ->
+      succ(LexerState(rest, lexer.advance_line(pos)), Some(token.TokenNewline))
     "//" <> rest -> {
       let rest =
         string.split_once(rest, "\n")

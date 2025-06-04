@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/list
 import gleam/pair
 import gleam/string
@@ -155,10 +156,12 @@ fn parse_primary_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_nested_expression() -> Parser(ast.Expression, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
-  use expr <- parser.perform(parse_expression())
-  use _ <- parser.perform(parser.eat_exact(token.TokenRParen))
-  parser.pure(expr)
+  parser.ignore_newline({
+    use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
+    use expr <- parser.perform(parse_expression())
+    use _ <- parser.perform(parser.eat_exact(token.TokenRParen))
+    parser.pure(expr)
+  })
 }
 
 fn parse_not_expression() -> Parser(ast.Expression, r) {
@@ -230,8 +233,8 @@ fn parse_string() -> Parser(ast.Expression, r) {
 
 fn parse_statement() -> Parser(ast.Statement, r) {
   parser.oneof([
-    parse_assign_statement(),
-    parse_define_statement(),
+    //parse_assign_statement(),
+    //parse_define_statement(),
     parse_eval_statement(),
   ])
 }
@@ -246,21 +249,29 @@ fn parse_assign_statement() -> Parser(ast.Statement, r) {
       parser.pure(cell)
     }),
   )
-  use expr <- parser.perform(parse_expression())
-  parser.pure(ast.AssignStatement(cell, expr))
+
+  parser.block_newline({
+    use expr <- parser.perform(parse_expression())
+    parser.pure(ast.AssignStatement(cell, expr))
+  })
 }
 
 fn parse_define_statement() -> Parser(ast.Statement, r) {
   use name <- parser.perform(parse_var_expression())
   use ty <- parser.perform(parser.maybe(parse_type()))
   use _ <- parser.perform(parser.eat_exact(token.TokenDefine))
-  use expr <- parser.perform(parse_expression())
-  parser.pure(ast.DefineStatement(name, ty, expr))
+
+  parser.block_newline({
+    use expr <- parser.perform(parse_expression())
+    parser.pure(ast.DefineStatement(name, ty, expr))
+  })
 }
 
 fn parse_eval_statement() -> Parser(ast.Statement, r) {
-  use expr <- parser.perform(parse_expression())
-  parser.pure(ast.EvalStatement(expr))
+  parser.block_newline({
+    use expr <- parser.perform(parse_expression())
+    parser.pure(ast.EvalStatement(expr))
+  })
 }
 
 fn parse_block() -> Parser(ast.Block, r) {
@@ -281,8 +292,14 @@ fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.Type)), r) {
     parse_ident(),
     parser.eat_exact(token.TokenComma),
   ))
-  use ty <- parser.perform(parse_type())
-  parser.pure(list.map(names, pair.new(_, ty)))
+
+  case names {
+    [] -> parser.die()
+    names -> {
+      use ty <- parser.perform(parse_type())
+      parser.pure(list.map(names, pair.new(_, ty)))
+    }
+  }
 }
 
 fn parse_function_declaration() -> Parser(ast.Declaration, r) {
@@ -304,7 +321,21 @@ fn parse_function_declaration() -> Parser(ast.Declaration, r) {
   parser.pure(ast.FunctionDeclaration(name, list.flatten(params), ret, body))
 }
 
-pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, parser.Message) {
+pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, String) {
   let p = parser.many(parse_declaration())
-  parser.parse(p, tokens)
+  case parser.parse(p, tokens) {
+    Ok(#(tree, [token.TokenNewline, token.TokenEOF])) -> Ok(tree)
+
+    Ok(#(_, tokens)) -> Error("Not parsed: " <> string.inspect(tokens))
+    Error(parser.Message(pos, unexpected, expected)) -> {
+      Error(
+        "Error at "
+        <> int.to_string(pos)
+        <> ": Expected "
+        <> string.join(expected, ", ")
+        <> ", but found "
+        <> unexpected,
+      )
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/pair
 import gleam/string
 
 import starc/lexer/token.{type Token}
@@ -8,7 +9,7 @@ pub type Parser(a, r) {
   Parser(
     run: fn(
       ParserState,
-      fn(a, Message) -> r,
+      fn(ParserState, a, Message) -> r,
       fn(ParserState, a, Message) -> r,
       fn(Message) -> r,
       fn(Message) -> r,
@@ -18,7 +19,7 @@ pub type Parser(a, r) {
 }
 
 pub type ParserState {
-  ParserState(tokens: List(Token), pos: Pos)
+  ParserState(tokens: List(Token), pos: Pos, ignore_newline: Bool)
 }
 
 pub type Message {
@@ -27,13 +28,6 @@ pub type Message {
 
 pub type Pos =
   Int
-
-pub opaque type ParserResult(a) {
-  OkEmpty(a, Message)
-  OkConsumed(ParserState, a, Message)
-  FailEmpty(Message)
-  FailConsumed(Message)
-}
 
 fn advance_token(pos: Pos) -> Pos {
   pos + 1
@@ -44,8 +38,13 @@ fn merge(msg1: Message, msg2: Message) -> Message {
 }
 
 pub fn pure(x: a) -> Parser(a, r) {
-  use ParserState(_, pos), ok_empty, _, _, _ <- Parser
-  ok_empty(x, Message(pos, "", []))
+  use ParserState(_, pos, _) as state, ok_empty, _, _, _ <- Parser
+  ok_empty(state, x, Message(pos, "", []))
+}
+
+pub fn die() -> Parser(a, r) {
+  use ParserState(_, pos, _), _, _, fail_empty, _ <- Parser
+  fail_empty(Message(pos, "", []))
 }
 
 pub fn perform(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
@@ -53,10 +52,10 @@ pub fn perform(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
 
   p.run(
     state,
-    fn(x, msg) {
+    fn(state, x, msg) {
       f(x).run(
         state,
-        fn(y, msg2) { ok_empty(y, merge(msg, msg2)) },
+        fn(state, y, msg2) { ok_empty(state, y, merge(msg, msg2)) },
         ok_consumed,
         fn(msg2) { fail_empty(merge(msg, msg2)) },
         fail_consumed,
@@ -65,7 +64,7 @@ pub fn perform(p: Parser(a, r), f: fn(a) -> Parser(b, r)) -> Parser(b, r) {
     fn(state, x, _) {
       f(x).run(
         state,
-        fn(y, msg) { ok_consumed(state, y, msg) },
+        fn(state, y, msg) { ok_consumed(state, y, msg) },
         ok_consumed,
         fail_consumed,
         fail_consumed,
@@ -80,18 +79,81 @@ pub fn map(p: Parser(a, r), f: fn(a) -> b) -> Parser(b, r) {
   perform(p, fn(x) { pure(f(x)) })
 }
 
+pub fn ignore_newline(p: Parser(a, r)) -> Parser(a, r) {
+  use
+    ParserState(tokens, pos, _),
+    ok_empty,
+    ok_consumed,
+    fail_empty,
+    fail_consumed
+  <- Parser
+
+  p.run(
+    ParserState(tokens, pos, True),
+    fn(state, x, msg) {
+      ok_empty(ParserState(state.tokens, state.pos, False), x, msg)
+    },
+    fn(state, x, msg) {
+      ok_consumed(ParserState(state.tokens, state.pos, False), x, msg)
+    },
+    fail_empty,
+    fail_consumed,
+  )
+}
+
+pub fn block_newline(p: Parser(a, r)) -> Parser(a, r) {
+  use
+    ParserState(tokens, pos, _),
+    ok_empty,
+    ok_consumed,
+    fail_empty,
+    fail_consumed
+  <- Parser
+
+  p.run(
+    ParserState(tokens, pos, False),
+    fn(state, x, msg) {
+      ok_empty(ParserState(state.tokens, state.pos, True), x, msg)
+    },
+    fn(state, x, msg) {
+      ok_consumed(ParserState(state.tokens, state.pos, True), x, msg)
+    },
+    fail_empty,
+    fail_consumed,
+  )
+}
+
 pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
-  use ParserState(tokens, pos), _, ok_consumed, fail_empty, _ <- Parser
+  use ParserState(tokens, pos, ignore_newline), _, ok_consumed, fail_empty, _ <-
+    Parser
+
+  let is_newline = fn(t) {
+    case t {
+      token.TokenNewline -> True
+      _ -> False
+    }
+  }
+
+  let tokens = case ignore_newline {
+    True -> list.split_while(tokens, is_newline) |> pair.second()
+    False -> tokens
+  }
+
   case tokens {
     [t, ..ts] ->
       case pred(t) {
         True -> {
           let pos = advance_token(pos)
-          ok_consumed(ParserState(ts, pos), t, Message(pos, "", []))
+          ok_consumed(
+            ParserState(ts, pos, ignore_newline),
+            t,
+            Message(pos, "", []),
+          )
         }
 
         False -> fail_empty(Message(pos, string.inspect(t), []))
       }
+
     _ -> fail_empty(Message(pos, "eof", []))
   }
 }
@@ -101,12 +163,12 @@ pub fn choose(p1: Parser(a, r), p2: Parser(a, r)) -> Parser(a, r) {
 
   p1.run(
     state,
-    fn(x, msg) {
+    fn(state, x, msg) {
       p2.run(
         state,
-        fn(_, msg2) { ok_empty(x, merge(msg, msg2)) },
+        fn(state, _, msg2) { ok_empty(state, x, merge(msg, msg2)) },
         ok_consumed,
-        fn(msg2) { ok_empty(x, merge(msg, msg2)) },
+        fn(msg2) { ok_empty(state, x, merge(msg, msg2)) },
         fail_consumed,
       )
     },
@@ -114,7 +176,7 @@ pub fn choose(p1: Parser(a, r), p2: Parser(a, r)) -> Parser(a, r) {
     fn(msg) {
       p2.run(
         state,
-        fn(x, msg2) { ok_empty(x, merge(msg, msg2)) },
+        fn(state, x, msg2) { ok_empty(state, x, merge(msg, msg2)) },
         ok_consumed,
         fn(msg2) { fail_empty(merge(msg, msg2)) },
         fail_consumed,
@@ -145,42 +207,20 @@ pub fn expect(p: Parser(a, r), msg: String) -> Parser(a, r) {
 
   p.run(
     state,
-    fn(x, msg2) { ok_empty(x, Message(msg2.pos, msg2.unexpected, [msg])) },
+    fn(state, x, original_msg) {
+      ok_empty(
+        state,
+        x,
+        Message(original_msg.pos, original_msg.unexpected, [msg]),
+      )
+    },
     ok_consumed,
-    fn(msg2) { fail_empty(Message(msg2.pos, msg2.unexpected, [msg])) },
+    fn(original_msg) {
+      fail_empty(Message(original_msg.pos, original_msg.unexpected, [msg]))
+    },
     fail_consumed,
   )
 }
-
-// pub fn many(p: Parser(a, ParserResult(List(a)))) -> Parser(List(a), r) {
-//   use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
-//   case many_loop(p, state, [], False) {
-//     OkEmpty(x) -> ok_empty(list.reverse(x))
-//     OkConsumed(state, x) -> ok_consumed(state, list.reverse(x))
-//     FailEmpty(msg) -> fail_empty(msg)
-//     FailConsumed(state, msg) -> fail_consumed(state, msg)
-//   }
-// }
-
-// fn many_loop(
-//   p: Parser(a, ParserResult(List(a))),
-//   state: ParserState,
-//   result: List(a),
-//   consumed: Bool,
-// ) -> ParserResult(List(a)) {
-//   p.run(
-//     state,
-//     fn(x, msg) { many_loop(p, state, [x, ..result], consumed) },
-//     fn(state, x, msg) { many_loop(p, state, [x, ..result], True) },
-//     fn(_) {
-//       case consumed {
-//         True -> OkConsumed(state, result)
-//         False -> OkEmpty(result)
-//       }
-//     },
-//     FailConsumed,
-//   )
-// }
 
 pub fn maybe(p: Parser(a, r)) -> Parser(Option(a), r) {
   choose(map(p, Some), pure(None))
@@ -190,38 +230,6 @@ pub fn oneof(parsers: List(Parser(a, r))) -> Parser(a, r) {
   let assert [p, ..ps] = parsers
   list.fold(ps, p, fn(p1, p2) { choose(p1, p2) })
 }
-
-// fn generalize(p: Parser(a, ParserResult(a))) -> Parser(a, r) {
-//   use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
-
-//   let res = p.run(state, OkEmpty, OkConsumed, FailEmpty, FailConsumed)
-//   case res {
-//     OkEmpty(x) -> ok_empty(x)
-//     OkConsumed(state, x) -> ok_consumed(state, x)
-//     FailEmpty(msg) -> fail_empty(msg)
-//     FailConsumed(state, msg) -> fail_consumed(state, msg)
-//   }
-// }
-
-// pub fn sep_by(
-//   p: Parser(a, ParserResult(List(a))),
-//   sep: Parser(b, ParserResult(List(a))),
-// ) -> Parser(List(a), r) {
-//   generalize(choose(
-//     {
-//       use x <- perform(p)
-//       use xs <- perform(
-//         many({
-//           use _ <- perform(sep)
-//           use y <- perform(p)
-//           pure(y)
-//         }),
-//       )
-//       pure([x, ..xs])
-//     },
-//     pure([]),
-//   ))
-// }
 
 pub fn sep_by(p: Parser(a, r), sep: Parser(b, r)) {
   choose(
@@ -246,9 +254,15 @@ pub fn eat_exact(t: Token) -> Parser(Token, r) {
 }
 
 pub fn parse(
-  p: Parser(a, Result(a, Message)),
+  p: Parser(a, Result(#(a, List(Token)), Message)),
   tokens: List(Token),
-) -> Result(a, Message) {
-  let state = ParserState(tokens, 1)
-  p.run(state, fn(x, _) { Ok(x) }, fn(_, x, _) { Ok(x) }, Error, Error)
+) -> Result(#(a, List(Token)), Message) {
+  let state = ParserState(tokens, 1, True)
+  p.run(
+    state,
+    fn(state, x, _) { Ok(#(x, state.tokens)) },
+    fn(state, x, _) { Ok(#(x, state.tokens)) },
+    Error,
+    Error,
+  )
 }
