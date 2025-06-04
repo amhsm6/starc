@@ -4,11 +4,12 @@ import gleam/string
 import simplifile
 import starc/lexer
 import starc/parser
+import starc/parser/core
 
 type Error {
   FileError(simplifile.FileError)
   LexerError(lexer.LexerError)
-  ParserError(String)
+  ParserError(core.Message)
 }
 
 pub fn main() {

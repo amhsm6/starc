@@ -15,7 +15,8 @@ fn parse_ident() -> Parser(ast.Identifier, r) {
         token.TokenIdent(_) -> True
         _ -> False
       }
-    }),
+    })
+    |> parser.expect("identifier"),
   )
 
   let assert token.TokenIdent(id) = t
@@ -29,7 +30,8 @@ fn parse_type() -> Parser(ast.Type, r) {
         token.TokenIdent(_) -> True
         _ -> False
       }
-    }),
+    })
+    |> parser.expect("type"),
   )
 
   let assert token.TokenIdent(id) = t
@@ -302,11 +304,7 @@ fn parse_function_declaration() -> Parser(ast.Declaration, r) {
   parser.pure(ast.FunctionDeclaration(name, list.flatten(params), ret, body))
 }
 
-pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, String) {
+pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, parser.Message) {
   let p = parser.many(parse_declaration())
-  case parser.parse(p, tokens) {
-    Ok(#([token.TokenEOF], tree)) -> Ok(tree)
-    Ok(#(tokens, _)) -> Error("Not parsed: " <> string.inspect(tokens))
-    Error(#(tokens, msg)) -> Error(msg <> ": " <> string.inspect(tokens))
-  }
+  parser.parse(p, tokens)
 }
