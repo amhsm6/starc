@@ -15,7 +15,7 @@ type Error {
 pub fn main() {
   let res = {
     use input <- result.try(
-      simplifile.read("./prog")
+      simplifile.read("./test.star")
       |> result.map_error(FileError),
     )
 
