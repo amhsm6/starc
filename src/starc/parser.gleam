@@ -156,9 +156,9 @@ fn parse_primary_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_nested_expression() -> Parser(ast.Expression, r) {
-  parser.ignore_newline({
-    use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
-    use expr <- parser.perform(parse_expression())
+  use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
+  use expr <- parser.perform(parser.ignore_newline(parse_expression()))
+  parser.eat_newlines({
     use _ <- parser.perform(parser.eat_exact(token.TokenRParen))
     parser.pure(expr)
   })
@@ -233,8 +233,8 @@ fn parse_string() -> Parser(ast.Expression, r) {
 
 fn parse_statement() -> Parser(ast.Statement, r) {
   parser.oneof([
-    //parse_assign_statement(),
-    //parse_define_statement(),
+    parse_assign_statement(),
+    parse_define_statement(),
     parse_eval_statement(),
   ])
 }
@@ -272,6 +272,7 @@ fn parse_eval_statement() -> Parser(ast.Statement, r) {
     use expr <- parser.perform(parse_expression())
     parser.pure(ast.EvalStatement(expr))
   })
+  |> parser.eat_newlines()
 }
 
 fn parse_block() -> Parser(ast.Block, r) {
