@@ -48,4 +48,6 @@ pub type Expression {
   NotExpr(Expression)
   AddrOfExpr(Expression)
   DerefExpr(Expression)
+
+  CallExpression(f: Expression, args: List(Expression))
 }

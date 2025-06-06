@@ -15,7 +15,19 @@ pub fn parse_int_test() {
 
   lexer.lex_program(" \n\n\n\n 1\n23  \n\n\n  ")
   |> should.be_ok()
-  |> should.equal([token.TokenInt(1), token.TokenInt(23), token.TokenEOF])
+  |> should.equal([
+    token.TokenNewline,
+    token.TokenNewline,
+    token.TokenNewline,
+    token.TokenNewline,
+    token.TokenInt(1),
+    token.TokenNewline,
+    token.TokenInt(23),
+    token.TokenNewline,
+    token.TokenNewline,
+    token.TokenNewline,
+    token.TokenEOF,
+  ])
 
   lexer.lex_program(" \n\n\n\n 1;\n23  \n\n\n  ")
   |> should.be_error()

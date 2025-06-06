@@ -155,7 +155,20 @@ fn parse_primary_expression() -> Parser(ast.Expression, r) {
     parse_int(),
     parse_bool(),
     parse_string(),
+    parse_call_expression(),
   ])
+}
+
+fn parse_call_expression() -> Parser(ast.Expression, r) {
+  use function <- perform(parse_var_expression())
+  use _ <- perform(eat_exact(token.TokenLParen))
+  use args <- perform(
+    ignore_newline(sep_by(parse_expression(), eat_exact(token.TokenComma))),
+  )
+  eat_newlines({
+    use _ <- perform(eat_exact(token.TokenRParen))
+    pure(ast.CallExpression(f: function, args:))
+  })
 }
 
 fn parse_nested_expression() -> Parser(ast.Expression, r) {
@@ -258,25 +271,30 @@ fn parse_assign_statement() -> Parser(ast.Statement, r) {
 
   block_newline({
     use expr <- perform(parse_expression())
-    pure(ast.AssignStatement(cell, expr))
+    pure(ast.AssignStatement(cell:, expr:))
   })
 }
 
 fn parse_define_statement() -> Parser(ast.Statement, r) {
-  use name <- perform(parse_var_expression())
-  use ty <- perform(maybe(parse_type()))
-  use _ <- perform(eat_exact(token.TokenDefine))
+  use #(name, ty) <- perform(
+    try({
+      use name <- perform(parse_var_expression())
+      use ty <- perform(maybe(parse_type()))
+      use _ <- perform(eat_exact(token.TokenDefine))
+      pure(#(name, ty))
+    }),
+  )
 
   block_newline({
     use expr <- perform(parse_expression())
-    pure(ast.DefineStatement(name, ty, expr))
+    pure(ast.DefineStatement(name:, ty:, expr:))
   })
 }
 
 fn parse_eval_statement() -> Parser(ast.Statement, r) {
   eat_newlines(
     block_newline({
-      use expr <- perform(parse_expression())
+      use expr <- perform(parse_call_expression())
       pure(ast.EvalStatement(expr))
     }),
   )
@@ -320,7 +338,12 @@ fn parse_function_declaration() -> Parser(ast.Declaration, r) {
 
   use body <- perform(parse_block())
 
-  pure(ast.FunctionDeclaration(name, list.flatten(params), ret, body))
+  pure(ast.FunctionDeclaration(
+    name:,
+    parameters: list.flatten(params),
+    result: ret,
+    body:,
+  ))
 }
 
 pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, String) {
