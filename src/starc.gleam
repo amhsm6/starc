@@ -5,11 +5,13 @@ import simplifile
 
 import starc/lexer
 import starc/parser
+import starc/sa
 
 type Error {
   FileError(simplifile.FileError)
   LexerError(lexer.LexerError)
   ParserError(String)
+  SemanticError(sa.Error)
 }
 
 pub fn main() {
@@ -27,6 +29,11 @@ pub fn main() {
     use tree <- result.try(
       parser.parse_program(tokens)
       |> result.map_error(ParserError),
+    )
+
+    use _ <- result.try(
+      sa.analyze(tree)
+      |> result.map_error(SemanticError),
     )
 
     Ok(tree)

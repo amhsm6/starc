@@ -1,14 +1,17 @@
 fn bar(x, y int) {
-    if x < y {
+    if x < y
+    {
         return true
-    } else {
+    }
+    else
+    {
         return x + 3
         *x = 10
     }
 }
 
-fn foo() {
-    if true {
+fn foo() float {
+    if *foo == *bar {
         x := 5
     } else {
         y := 10
