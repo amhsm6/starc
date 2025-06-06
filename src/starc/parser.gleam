@@ -5,49 +5,52 @@ import gleam/string
 
 import starc/lexer/token.{type Token}
 import starc/parser/ast
-import starc/parser/core.{type Parser} as parser
+import starc/parser/core.{
+  type Parser, Message, block_newline, die, eat, eat_exact, eat_newlines, expect,
+  ignore_newline, many, maybe, oneof, parse, perform, pure, sep_by, try,
+}
 
 // ================= BASIC =================
 
 fn parse_ident() -> Parser(ast.Identifier, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- perform(
+    eat(fn(t) {
       case t {
         token.TokenIdent(_) -> True
         _ -> False
       }
     })
-    |> parser.expect("identifier"),
+    |> expect("identifier"),
   )
 
   let assert token.TokenIdent(id) = t
-  parser.pure(id)
+  pure(id)
 }
 
 fn parse_type() -> Parser(ast.Type, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- perform(
+    eat(fn(t) {
       case t {
         token.TokenIdent(_) -> True
         _ -> False
       }
     })
-    |> parser.expect("type"),
+    |> expect("type"),
   )
 
   let assert token.TokenIdent(id) = t
-  parser.pure(id)
+  pure(id)
 }
 
 // ================= EXPRESSION =================
 
 fn parse_expression() -> Parser(ast.Expression, r) {
-  use expr <- parser.perform(parse_additive_expression())
+  use expr <- perform(parse_additive_expression())
 
-  use next <- parser.perform(
-    parser.many({
-      use t <- parser.perform(
-        parser.eat(fn(t) {
+  use next <- perform(
+    many({
+      use t <- perform(
+        eat(fn(t) {
           case t {
             token.TokenEquals -> True
             token.TokenNotEquals -> True
@@ -59,12 +62,12 @@ fn parse_expression() -> Parser(ast.Expression, r) {
           }
         }),
       )
-      use e <- parser.perform(parse_additive_expression())
-      parser.pure(#(t, e))
+      use e <- perform(parse_additive_expression())
+      pure(#(t, e))
     }),
   )
 
-  parser.pure(
+  pure(
     list.fold(next, expr, fn(e1, x) {
       let #(token, e2) = x
       case token {
@@ -81,12 +84,12 @@ fn parse_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_additive_expression() -> Parser(ast.Expression, r) {
-  use expr <- parser.perform(parse_multiplicative_expression())
+  use expr <- perform(parse_multiplicative_expression())
 
-  use next <- parser.perform(
-    parser.many({
-      use t <- parser.perform(
-        parser.eat(fn(t) {
+  use next <- perform(
+    many({
+      use t <- perform(
+        eat(fn(t) {
           case t {
             token.TokenPlus -> True
             token.TokenMinus -> True
@@ -94,12 +97,12 @@ fn parse_additive_expression() -> Parser(ast.Expression, r) {
           }
         }),
       )
-      use e <- parser.perform(parse_multiplicative_expression())
-      parser.pure(#(t, e))
+      use e <- perform(parse_multiplicative_expression())
+      pure(#(t, e))
     }),
   )
 
-  parser.pure(
+  pure(
     list.fold(next, expr, fn(e1, item) {
       let #(token, e2) = item
       case token {
@@ -112,12 +115,12 @@ fn parse_additive_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_multiplicative_expression() -> Parser(ast.Expression, r) {
-  use expr <- parser.perform(parse_primary_expression())
+  use expr <- perform(parse_primary_expression())
 
-  use next <- parser.perform(
-    parser.many({
-      use t <- parser.perform(
-        parser.eat(fn(t) {
+  use next <- perform(
+    many({
+      use t <- perform(
+        eat(fn(t) {
           case t {
             token.TokenStar -> True
             token.TokenSlash -> True
@@ -125,12 +128,12 @@ fn parse_multiplicative_expression() -> Parser(ast.Expression, r) {
           }
         }),
       )
-      use e <- parser.perform(parse_primary_expression())
-      parser.pure(#(t, e))
+      use e <- perform(parse_primary_expression())
+      pure(#(t, e))
     }),
   )
 
-  parser.pure(
+  pure(
     list.fold(next, expr, fn(e1, item) {
       let #(token, e2) = item
       case token {
@@ -143,7 +146,7 @@ fn parse_multiplicative_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_primary_expression() -> Parser(ast.Expression, r) {
-  parser.oneof([
+  oneof([
     parse_nested_expression(),
     parse_not_expression(),
     parse_addrof_expression(),
@@ -156,179 +159,181 @@ fn parse_primary_expression() -> Parser(ast.Expression, r) {
 }
 
 fn parse_nested_expression() -> Parser(ast.Expression, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
-  use expr <- parser.perform(parser.ignore_newline(parse_expression()))
-  parser.eat_newlines({
-    use _ <- parser.perform(parser.eat_exact(token.TokenRParen))
-    parser.pure(expr)
+  use _ <- perform(eat_exact(token.TokenLParen))
+  use expr <- perform(ignore_newline(parse_expression()))
+  eat_newlines({
+    use _ <- perform(eat_exact(token.TokenRParen))
+    pure(expr)
   })
 }
 
 fn parse_not_expression() -> Parser(ast.Expression, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenBang))
-  use expr <- parser.perform(parse_primary_expression())
-  parser.pure(ast.NotExpr(expr))
+  use _ <- perform(eat_exact(token.TokenBang))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.NotExpr(expr))
 }
 
 fn parse_addrof_expression() -> Parser(ast.Expression, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenAmpersand))
-  use expr <- parser.perform(parse_primary_expression())
-  parser.pure(ast.AddrOfExpr(expr))
+  use _ <- perform(eat_exact(token.TokenAmpersand))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.AddrOfExpr(expr))
 }
 
 fn parse_deref_expression() -> Parser(ast.Expression, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenStar))
-  use expr <- parser.perform(parse_primary_expression())
-  parser.pure(ast.DerefExpr(expr))
+  use _ <- perform(eat_exact(token.TokenStar))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.DerefExpr(expr))
 }
 
 fn parse_var_expression() -> Parser(ast.Expression, r) {
-  use id <- parser.perform(parse_ident())
-  parser.pure(ast.VarExpr(id))
+  use id <- perform(parse_ident())
+  pure(ast.VarExpr(id))
 }
 
 fn parse_int() -> Parser(ast.Expression, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- perform(
+    eat(fn(t) {
       case t {
         token.TokenInt(_) -> True
         _ -> False
       }
-    }),
+    })
+    |> expect("int"),
   )
 
   let assert token.TokenInt(n) = t
-  parser.pure(ast.IntExpr(n))
+  pure(ast.IntExpr(n))
 }
 
 fn parse_bool() -> Parser(ast.Expression, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- perform(
+    eat(fn(t) {
       case t {
         token.TokenBool(_) -> True
         _ -> False
       }
-    }),
+    })
+    |> expect("bool"),
   )
 
   let assert token.TokenBool(b) = t
-  parser.pure(ast.BoolExpr(b))
+  pure(ast.BoolExpr(b))
 }
 
 fn parse_string() -> Parser(ast.Expression, r) {
-  use t <- parser.perform(
-    parser.eat(fn(t) {
+  use t <- perform(
+    eat(fn(t) {
       case t {
         token.TokenString(_) -> True
         _ -> False
       }
-    }),
+    })
+    |> expect("string"),
   )
 
   let assert token.TokenString(s) = t
-  parser.pure(ast.StringExpr(s))
+  pure(ast.StringExpr(s))
 }
 
 // ================= STATEMENT =================
 
 fn parse_statement() -> Parser(ast.Statement, r) {
-  parser.oneof([
-    parse_assign_statement(),
-    parse_define_statement(),
-    parse_eval_statement(),
+  oneof([
+    parse_assign_statement() |> expect("assign statement"),
+    parse_define_statement() |> expect("define statement"),
+    parse_eval_statement() |> expect("eval statement"),
   ])
 }
 
 fn parse_assign_statement() -> Parser(ast.Statement, r) {
-  use cell <- parser.perform(
-    parser.try({
-      use cell <- parser.perform(
-        parser.oneof([parse_var_expression(), parse_deref_expression()]),
+  use cell <- perform(
+    try({
+      use cell <- perform(
+        oneof([parse_var_expression(), parse_deref_expression()]),
       )
-      use _ <- parser.perform(parser.eat_exact(token.TokenAssign))
-      parser.pure(cell)
+      use _ <- perform(eat_exact(token.TokenAssign))
+      pure(cell)
     }),
   )
 
-  parser.block_newline({
-    use expr <- parser.perform(parse_expression())
-    parser.pure(ast.AssignStatement(cell, expr))
+  block_newline({
+    use expr <- perform(parse_expression())
+    pure(ast.AssignStatement(cell, expr))
   })
 }
 
 fn parse_define_statement() -> Parser(ast.Statement, r) {
-  use name <- parser.perform(parse_var_expression())
-  use ty <- parser.perform(parser.maybe(parse_type()))
-  use _ <- parser.perform(parser.eat_exact(token.TokenDefine))
+  use name <- perform(parse_var_expression())
+  use ty <- perform(maybe(parse_type()))
+  use _ <- perform(eat_exact(token.TokenDefine))
 
-  parser.block_newline({
-    use expr <- parser.perform(parse_expression())
-    parser.pure(ast.DefineStatement(name, ty, expr))
+  block_newline({
+    use expr <- perform(parse_expression())
+    pure(ast.DefineStatement(name, ty, expr))
   })
 }
 
 fn parse_eval_statement() -> Parser(ast.Statement, r) {
-  parser.block_newline({
-    use expr <- parser.perform(parse_expression())
-    parser.pure(ast.EvalStatement(expr))
-  })
-  |> parser.eat_newlines()
+  eat_newlines(
+    block_newline({
+      use expr <- perform(parse_expression())
+      pure(ast.EvalStatement(expr))
+    }),
+  )
 }
 
 fn parse_block() -> Parser(ast.Block, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenLBrace))
-  use statements <- parser.perform(parser.many(parse_statement()))
-  use _ <- parser.perform(parser.eat_exact(token.TokenRBrace))
-  parser.pure(statements)
+  use _ <- perform(eat_exact(token.TokenLBrace))
+  use statements <- perform(many(parse_statement()))
+  use _ <- perform(eat_exact(token.TokenRBrace))
+  pure(statements)
 }
 
 // ================= DECLARATION =================
 
 fn parse_declaration() -> Parser(ast.Declaration, r) {
-  parser.oneof([parse_function_declaration()])
+  oneof([parse_function_declaration()])
 }
 
 fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.Type)), r) {
-  use names <- parser.perform(parser.sep_by(
-    parse_ident(),
-    parser.eat_exact(token.TokenComma),
-  ))
+  use names <- perform(sep_by(parse_ident(), eat_exact(token.TokenComma)))
 
   case names {
-    [] -> parser.die()
+    [] -> die()
     names -> {
-      use ty <- parser.perform(parse_type())
-      parser.pure(list.map(names, pair.new(_, ty)))
+      use ty <- perform(parse_type())
+      pure(list.map(names, pair.new(_, ty)))
     }
   }
 }
 
 fn parse_function_declaration() -> Parser(ast.Declaration, r) {
-  use _ <- parser.perform(parser.eat_exact(token.TokenFn))
+  use _ <- perform(eat_exact(token.TokenFn))
 
-  use name <- parser.perform(parse_ident())
+  use name <- perform(parse_ident())
 
-  use _ <- parser.perform(parser.eat_exact(token.TokenLParen))
-  use params <- parser.perform(parser.sep_by(
-    parse_parameter(),
-    parser.eat_exact(token.TokenComma),
-  ))
-  use _ <- parser.perform(parser.eat_exact(token.TokenRParen))
+  use _ <- perform(eat_exact(token.TokenLParen))
+  use params <- perform(sep_by(parse_parameter(), eat_exact(token.TokenComma)))
+  use _ <- perform(eat_exact(token.TokenRParen))
 
-  use ret <- parser.perform(parser.maybe(parse_type()))
+  use ret <- perform(maybe(parse_type()))
 
-  use body <- parser.perform(parse_block())
+  use body <- perform(parse_block())
 
-  parser.pure(ast.FunctionDeclaration(name, list.flatten(params), ret, body))
+  pure(ast.FunctionDeclaration(name, list.flatten(params), ret, body))
 }
 
 pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, String) {
-  let p = parser.many(parse_declaration())
-  case parser.parse(p, tokens) {
-    Ok(#(tree, [token.TokenNewline, token.TokenEOF])) -> Ok(tree)
+  let p = {
+    use program <- perform(many(parse_declaration()))
+    eat_newlines(pure(program))
+  }
+
+  case parse(p, tokens) {
+    Ok(#(tree, [token.TokenEOF])) -> Ok(tree)
 
     Ok(#(_, tokens)) -> Error("Not parsed: " <> string.inspect(tokens))
-    Error(parser.Message(pos, unexpected, expected)) -> {
+    Error(Message(pos:, unexpected:, expected:)) -> {
       Error(
         "Error at "
         <> int.to_string(pos)

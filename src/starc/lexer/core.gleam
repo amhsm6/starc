@@ -68,7 +68,6 @@ pub fn lex(
   l: Lexer(a, Option(#(LexerState, a))),
   input: String,
 ) -> Option(#(LexerState, a)) {
-  l.run(LexerState(input, Pos(1, 1)), fn(state, x) { Some(#(state, x)) }, fn() {
-    None
-  })
+  let state = LexerState(input:, pos: Pos(1, 1))
+  l.run(state, fn(state, x) { Some(#(state, x)) }, fn() { None })
 }
