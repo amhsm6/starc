@@ -28,8 +28,12 @@ pub type Token {
   TokenDefine
   TokenAssign
 
-  TokenIf
   TokenFn
+  TokenReturn
+
+  TokenIf
+  TokenElse
+  TokenElseIf
 
   TokenNewline
   TokenEOF

@@ -89,10 +89,23 @@ fn symbol() -> Lexer(Option(Token), r) {
         Some(token.TokenAssign),
       )
 
-    "if" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenIf))
     "fn" <> rest ->
       succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenFn))
+    "return" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 6)),
+        Some(token.TokenReturn),
+      )
+
+    "if" <> rest ->
+      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenIf))
+    "else if" <> rest ->
+      succ(
+        LexerState(rest, lexer.advance_chars(pos, 7)),
+        Some(token.TokenElseIf),
+      )
+    "else" <> rest ->
+      succ(LexerState(rest, lexer.advance_chars(pos, 4)), Some(token.TokenElse))
 
     _ -> fail()
   }

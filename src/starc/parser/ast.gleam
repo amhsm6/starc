@@ -19,9 +19,16 @@ pub type Block =
   List(Statement)
 
 pub type Statement {
-  EvalStatement(Expression)
+  ReturnStatement(Expression)
+  CallStatement(Expression)
   DefineStatement(name: Expression, ty: Option(Type), expr: Expression)
   AssignStatement(cell: Expression, expr: Expression)
+  IfStatement(
+    condition: Expression,
+    block: Block,
+    elseifs: List(#(Expression, Block)),
+    elseblock: Option(Block),
+  )
 }
 
 pub type Type =

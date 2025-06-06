@@ -85,7 +85,7 @@ pub fn some_test() {
             ast.MulExpr(ast.IntExpr(2), ast.IntExpr(5)),
           ),
         ),
-        ast.EvalStatement(ast.CallExpression(
+        ast.CallStatement(ast.CallExpression(
           ast.VarExpr("baz"),
           [
             ast.DerefExpr(ast.IntExpr(4)),
@@ -155,6 +155,105 @@ pub fn some_test() {
   let assert Error(ParserError(
     "Error at 15: Expected TokenRBrace, but found TokenAssign",
   )) = lex_and_parse("fn foo() int { foo float32 := 3 + 8 *x = 15 }")
+
+  let assert Ok([
+    ast.FunctionDeclaration(
+      "foo",
+      [],
+      None,
+      [
+        ast.IfStatement(
+          ast.BoolExpr(True),
+          [ast.DefineStatement(ast.VarExpr("x"), None, ast.IntExpr(5))],
+          [],
+          Some([
+            ast.DefineStatement(ast.VarExpr("y"), None, ast.IntExpr(10)),
+            ast.AssignStatement(
+              ast.DerefExpr(ast.VarExpr("x")),
+              ast.IntExpr(100),
+            ),
+          ]),
+        ),
+        ast.IfStatement(
+          ast.EQExpr(ast.DerefExpr(ast.VarExpr("x")), ast.IntExpr(5)),
+          [
+            ast.AssignStatement(
+              ast.DerefExpr(ast.VarExpr("foo")),
+              ast.AddExpr(ast.IntExpr(3), ast.IntExpr(4)),
+            ),
+          ],
+          [
+            #(
+              ast.EQExpr(
+                ast.BoolExpr(False),
+                ast.AddExpr(ast.BoolExpr(True), ast.IntExpr(1)),
+              ),
+              [
+                ast.DefineStatement(
+                  ast.VarExpr("foo"),
+                  None,
+                  ast.CallExpression(
+                    ast.VarExpr("bar"),
+                    [
+                      ast.IntExpr(10),
+                      ast.SubExpr(
+                        ast.AddExpr(ast.IntExpr(200), ast.IntExpr(100)),
+                        ast.DerefExpr(ast.IntExpr(50)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            #(
+              ast.BoolExpr(False),
+              [
+                ast.CallStatement(ast.CallExpression(
+                  ast.VarExpr("print"),
+                  [ast.StringExpr("123")],
+                )),
+              ],
+            ),
+          ],
+          None,
+        ),
+        ast.IfStatement(
+          ast.CallExpression(
+            ast.VarExpr("foo"),
+            [ast.IntExpr(1), ast.IntExpr(2)],
+          ),
+          [ast.DefineStatement(ast.VarExpr("x"), None, ast.IntExpr(10))],
+          [],
+          None,
+        ),
+      ],
+    ),
+  ]) =
+    lex_and_parse(
+      "fn foo() {
+    if true {
+        x := 5
+    } else {
+        y := 10
+        *x = 100
+    }
+
+    if *x == 5 {
+        *foo = 3 + 4
+    } else if false == true + 1 {
+        foo := bar(
+            10,
+            200 + 100 - *50
+        )
+    } else if false {
+        print(\"123\")
+    }
+
+    if foo(1, 2) {
+        x := 10
+    }
+}",
+    )
 
   Nil
 }

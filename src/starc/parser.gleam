@@ -147,6 +147,7 @@ fn parse_multiplicative_expression() -> Parser(ast.Expression, r) {
 
 fn parse_primary_expression() -> Parser(ast.Expression, r) {
   oneof([
+    parse_call_expression(),
     parse_nested_expression(),
     parse_not_expression(),
     parse_addrof_expression(),
@@ -155,13 +156,17 @@ fn parse_primary_expression() -> Parser(ast.Expression, r) {
     parse_int(),
     parse_bool(),
     parse_string(),
-    parse_call_expression(),
   ])
 }
 
 fn parse_call_expression() -> Parser(ast.Expression, r) {
-  use function <- perform(parse_var_expression())
-  use _ <- perform(eat_exact(token.TokenLParen))
+  use function <- perform(
+    try({
+      use function <- perform(parse_var_expression())
+      use _ <- perform(eat_exact(token.TokenLParen))
+      pure(function)
+    }),
+  )
   use args <- perform(
     ignore_newline(sep_by(parse_expression(), eat_exact(token.TokenComma))),
   )
@@ -252,10 +257,20 @@ fn parse_string() -> Parser(ast.Expression, r) {
 
 fn parse_statement() -> Parser(ast.Statement, r) {
   oneof([
+    parse_return_statement() |> expect("return statement"),
     parse_assign_statement() |> expect("assign statement"),
     parse_define_statement() |> expect("define statement"),
-    parse_eval_statement() |> expect("eval statement"),
+    parse_call_statement() |> expect("call statement"),
+    parse_if_statement() |> expect("if statement"),
   ])
+}
+
+fn parse_return_statement() -> Parser(ast.Statement, r) {
+  use _ <- perform(eat_exact(token.TokenReturn))
+  block_newline(
+    parse_expression()
+    |> core.map(ast.ReturnStatement),
+  )
 }
 
 fn parse_assign_statement() -> Parser(ast.Statement, r) {
@@ -291,13 +306,35 @@ fn parse_define_statement() -> Parser(ast.Statement, r) {
   })
 }
 
-fn parse_eval_statement() -> Parser(ast.Statement, r) {
-  eat_newlines(
-    block_newline({
-      use expr <- perform(parse_call_expression())
-      pure(ast.EvalStatement(expr))
+fn parse_call_statement() -> Parser(ast.Statement, r) {
+  eat_newlines({
+    use expr <- perform(block_newline(parse_call_expression()))
+    pure(ast.CallStatement(expr))
+  })
+}
+
+fn parse_if_statement() -> Parser(ast.Statement, r) {
+  use _ <- perform(eat_exact(token.TokenIf))
+  use condition <- perform(block_newline(parse_expression()))
+  use block <- perform(parse_block())
+
+  use elseifs <- perform(
+    many({
+      use _ <- perform(eat_exact(token.TokenElseIf))
+      use expr <- perform(block_newline(parse_expression()))
+      use block <- perform(parse_block())
+      pure(#(expr, block))
     }),
   )
+
+  use elseblock <- perform(
+    maybe({
+      use _ <- perform(eat_exact(token.TokenElse))
+      parse_block()
+    }),
+  )
+
+  pure(ast.IfStatement(condition:, block:, elseifs:, elseblock:))
 }
 
 fn parse_block() -> Parser(ast.Block, r) {
