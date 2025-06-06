@@ -74,15 +74,21 @@ pub fn map(p: Parser(a, r), f: fn(a) -> b) -> Parser(b, r) {
 }
 
 pub fn block_newline(p: Parser(a, r)) -> Parser(a, r) {
-  use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
+  use
+    ParserState(ignore_newline:, ..) as state,
+    ok_empty,
+    ok_consumed,
+    fail_empty,
+    fail_consumed
+  <- Parser
 
   p.run(
     ParserState(..state, ignore_newline: False),
     fn(state, x, msg) {
-      ok_empty(ParserState(..state, ignore_newline: True), x, msg)
+      ok_empty(ParserState(..state, ignore_newline:), x, msg)
     },
     fn(state, x, msg) {
-      ok_consumed(ParserState(..state, ignore_newline: True), x, msg)
+      ok_consumed(ParserState(..state, ignore_newline:), x, msg)
     },
     fail_empty,
     fail_consumed,
@@ -90,15 +96,21 @@ pub fn block_newline(p: Parser(a, r)) -> Parser(a, r) {
 }
 
 pub fn ignore_newline(p: Parser(a, r)) -> Parser(a, r) {
-  use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
+  use
+    ParserState(ignore_newline:, ..) as state,
+    ok_empty,
+    ok_consumed,
+    fail_empty,
+    fail_consumed
+  <- Parser
 
   p.run(
     ParserState(..state, ignore_newline: True),
     fn(state, x, msg) {
-      ok_empty(ParserState(..state, ignore_newline: False), x, msg)
+      ok_empty(ParserState(..state, ignore_newline:), x, msg)
     },
     fn(state, x, msg) {
-      ok_consumed(ParserState(..state, ignore_newline: False), x, msg)
+      ok_consumed(ParserState(..state, ignore_newline:), x, msg)
     },
     fail_empty,
     fail_consumed,

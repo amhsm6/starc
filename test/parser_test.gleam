@@ -68,3 +68,93 @@ pub fn parse_fn_test() {
 
   Nil
 }
+
+pub fn some_test() {
+  let assert Ok([
+    ast.FunctionDeclaration(
+      "foo",
+      [],
+      Some("int"),
+      [
+        ast.DefineStatement(ast.VarExpr("x"), Some("int"), ast.IntExpr(3)),
+        ast.AssignStatement(ast.VarExpr("y"), ast.IntExpr(5)),
+        ast.AssignStatement(
+          ast.DerefExpr(ast.VarExpr("foo")),
+          ast.AddExpr(
+            ast.IntExpr(3),
+            ast.MulExpr(ast.IntExpr(2), ast.IntExpr(5)),
+          ),
+        ),
+        ast.EvalStatement(ast.CallExpression(
+          ast.VarExpr("baz"),
+          [
+            ast.DerefExpr(ast.IntExpr(4)),
+            ast.DerefExpr(ast.AddExpr(ast.IntExpr(4), ast.VarExpr("foo"))),
+            ast.DerefExpr(ast.AddExpr(
+              ast.IntExpr(4),
+              ast.NotExpr(ast.BoolExpr(False)),
+            )),
+          ],
+        )),
+      ],
+    ),
+  ]) =
+    lex_and_parse(
+      "\nfn foo() int {\n x int := 3\n y = 5\n *foo = (3 + 2 * 5)\nbaz(*4,\n*(4 + foo),\n    *(4 + !false)) }\n\n",
+    )
+
+  let assert Ok([
+    ast.FunctionDeclaration(
+      "foo",
+      [],
+      Some("int"),
+      [
+        ast.DefineStatement(
+          ast.VarExpr("foo"),
+          None,
+          ast.EQExpr(
+            ast.AddExpr(
+              ast.SubExpr(
+                ast.AddExpr(
+                  ast.IntExpr(3),
+                  ast.MulExpr(ast.IntExpr(5), ast.IntExpr(6)),
+                ),
+                ast.DerefExpr(ast.BoolExpr(False)),
+              ),
+              ast.AddrOfExpr(ast.AddExpr(
+                ast.SubExpr(ast.BoolExpr(False), ast.BoolExpr(True)),
+                ast.VarExpr("bar"),
+              )),
+            ),
+            ast.DerefExpr(ast.DerefExpr(ast.VarExpr("double_deref"))),
+          ),
+        ),
+      ],
+    ),
+  ]) =
+    lex_and_parse(
+      "fn foo() int { foo := (\n3 + 5 * 6 - *false + &(false - true + bar)\n==\n **double_deref) }",
+    )
+
+  let assert Ok([
+    ast.FunctionDeclaration(
+      "foo",
+      [],
+      Some("int"),
+      [
+        ast.DefineStatement(
+          ast.VarExpr("foo"),
+          Some("float32"),
+          ast.AddExpr(ast.IntExpr(3), ast.IntExpr(8)),
+        ),
+        ast.AssignStatement(ast.DerefExpr(ast.VarExpr("x")), ast.IntExpr(15)),
+      ],
+    ),
+  ]) = lex_and_parse("fn foo() int { foo float32 := 3 + 8\n *x = 15 }")
+
+  let assert Error(ParserError(
+    "Error at 15: Expected TokenRBrace, but found TokenAssign",
+  )) = lex_and_parse("fn foo() int { foo float32 := 3 + 8 *x = 15 }")
+
+  Nil
+}
