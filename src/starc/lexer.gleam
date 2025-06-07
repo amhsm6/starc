@@ -6,7 +6,10 @@ import gleam/result
 import gleam/set.{type Set}
 import gleam/string
 
-import starc/lexer/core.{type Lexer, type Pos, Lexer, LexerState} as lexer
+import starc/lexer/core.{
+  type Lexer, type Pos, Lexer, LexerState, advance_char, advance_chars,
+  advance_line, lex, many, perform, pure, some,
+}
 import starc/lexer/token.{type Token}
 import starc/lexer/util
 
@@ -18,94 +21,73 @@ fn symbol() -> Lexer(Option(Token), r) {
   use LexerState(input, pos), succ, fail <- Lexer
 
   case input {
-    " " <> rest -> succ(LexerState(rest, lexer.advance_char(pos)), None)
+    " " <> rest -> succ(LexerState(rest, advance_char(pos)), None)
     "\n" <> rest ->
-      succ(LexerState(rest, lexer.advance_line(pos)), Some(token.TokenNewline))
+      succ(LexerState(rest, advance_line(pos)), Some(token.TokenNewline))
     "//" <> rest -> {
       let rest =
         string.split_once(rest, "\n")
         |> result.map(pair.second)
         |> result.unwrap("")
 
-      succ(LexerState(rest, lexer.advance_line(pos)), None)
+      succ(LexerState(rest, advance_line(pos)), None)
     }
 
     "(" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLParen))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenLParen))
     ")" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenRParen))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenRParen))
     "{" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLBrace))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenLBrace))
     "}" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenRBrace))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenRBrace))
 
     "!=" <> rest -> {
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 2)),
-        Some(token.TokenNotEquals),
-      )
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenNotEquals))
     }
 
     "+" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenPlus))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenPlus))
     "-" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenMinus))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenMinus))
     "*" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenStar))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenStar))
     "/" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenSlash))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenSlash))
     "," <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenComma))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenComma))
     "!" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenBang))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenBang))
     "&" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_char(pos)),
-        Some(token.TokenAmpersand),
-      )
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenAmpersand))
 
     "==" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 2)),
-        Some(token.TokenEquals),
-      )
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenEquals))
     "<=" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenLE))
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenLE))
     "<" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenLT))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenLT))
     ">=" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenGE))
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenGE))
     ">" <> rest ->
-      succ(LexerState(rest, lexer.advance_char(pos)), Some(token.TokenGT))
+      succ(LexerState(rest, advance_char(pos)), Some(token.TokenGT))
 
     ":=" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 2)),
-        Some(token.TokenDefine),
-      )
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenDefine))
     "=" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 2)),
-        Some(token.TokenAssign),
-      )
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenAssign))
 
     "fn" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenFn))
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenFn))
     "return" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 6)),
-        Some(token.TokenReturn),
-      )
+      succ(LexerState(rest, advance_chars(pos, 6)), Some(token.TokenReturn))
 
     "if" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 2)), Some(token.TokenIf))
+      succ(LexerState(rest, advance_chars(pos, 2)), Some(token.TokenIf))
     "else if" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 7)),
-        Some(token.TokenElseIf),
-      )
+      succ(LexerState(rest, advance_chars(pos, 7)), Some(token.TokenElseIf))
     "else" <> rest ->
-      succ(LexerState(rest, lexer.advance_chars(pos, 4)), Some(token.TokenElse))
+      succ(LexerState(rest, advance_chars(pos, 4)), Some(token.TokenElse))
 
     _ -> fail()
   }
@@ -117,7 +99,7 @@ fn char_in_set(s: Set(String)) -> Lexer(String, r) {
   let res = {
     use #(char, rest) <- result.try(string.pop_grapheme(input))
     case set.contains(s, char) {
-      True -> Ok(succ(LexerState(rest, lexer.advance_char(pos)), char))
+      True -> Ok(succ(LexerState(rest, advance_char(pos)), char))
       False -> Error(Nil)
     }
   }
@@ -129,11 +111,9 @@ fn ident() -> Lexer(Option(Token), r) {
   let alpha_underscore = set.union(util.alpha(), util.underscore())
   let alphanumeric_underscore = set.union(alpha_underscore, util.digits())
 
-  use first <- lexer.perform(char_in_set(alpha_underscore))
-  use rest <- lexer.perform(
-    char_in_set(alphanumeric_underscore) |> lexer.many(),
-  )
-  lexer.pure(Some(token.TokenIdent(string.concat([first, ..rest]))))
+  use first <- perform(char_in_set(alpha_underscore))
+  use rest <- perform(char_in_set(alphanumeric_underscore) |> many())
+  pure(Some(token.TokenIdent(string.concat([first, ..rest]))))
 }
 
 fn digit() -> Lexer(Int, r) {
@@ -142,16 +122,16 @@ fn digit() -> Lexer(Int, r) {
   let res = {
     use #(char, rest) <- result.try(string.pop_grapheme(input))
     use digit <- result.try(int.parse(char))
-    Ok(succ(LexerState(rest, lexer.advance_char(pos)), digit))
+    Ok(succ(LexerState(rest, advance_char(pos)), digit))
   }
 
   result.lazy_unwrap(res, fail)
 }
 
 fn int() -> Lexer(Option(Token), r) {
-  use digits <- lexer.perform(digit() |> lexer.some())
+  use digits <- perform(some(digit()))
   let assert Ok(num) = int.undigits(digits, 10)
-  lexer.pure(Some(token.TokenInt(num)))
+  pure(Some(token.TokenInt(num)))
 }
 
 fn bool() -> Lexer(Option(Token), r) {
@@ -159,14 +139,11 @@ fn bool() -> Lexer(Option(Token), r) {
 
   case input {
     "true" <> rest ->
-      succ(
-        LexerState(rest, lexer.advance_chars(pos, 4)),
-        Some(token.TokenBool(True)),
-      )
+      succ(LexerState(rest, advance_chars(pos, 4)), Some(token.TokenBool(True)))
 
     "false" <> rest ->
       succ(
-        LexerState(rest, lexer.advance_chars(pos, 5)),
+        LexerState(rest, advance_chars(pos, 5)),
         Some(token.TokenBool(False)),
       )
 
@@ -186,7 +163,7 @@ fn string() -> Lexer(Option(Token), r) {
     })
 
     Ok(succ(
-      LexerState(rest, lexer.advance_chars(pos, string.length(str) + 2)),
+      LexerState(rest, advance_chars(pos, string.length(str) + 2)),
       Some(token.TokenString(str)),
     ))
   }
@@ -206,8 +183,8 @@ fn token() -> Lexer(Option(Token), r) {
 }
 
 pub fn lex_program(input: String) -> Result(List(Token), LexerError) {
-  let l = lexer.many(token())
-  let assert Some(#(state, tokens)) = lexer.lex(l, input)
+  let l = many(token())
+  let assert Some(#(state, tokens)) = lex(l, input)
 
   let tokens =
     option.values(tokens)

@@ -3,7 +3,7 @@ import gleam/list
 import gleam/pair
 import gleam/string
 
-import starc/lexer/token.{type Token}
+import starc/lexer/token
 import starc/parser/ast
 import starc/parser/core.{
   type Parser, Message, block_newline, die, eat, eat_exact, eat_newlines, expect,
@@ -27,7 +27,7 @@ fn parse_ident() -> Parser(ast.Identifier, r) {
   pure(id)
 }
 
-fn parse_type() -> Parser(ast.Type, r) {
+fn parse_type() -> Parser(ast.TypeId, r) {
   use t <- perform(
     eat(fn(t) {
       case t {
@@ -350,7 +350,7 @@ fn parse_declaration() -> Parser(ast.Declaration, r) {
   oneof([parse_function_declaration()])
 }
 
-fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.Type)), r) {
+fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.TypeId)), r) {
   use names <- perform(sep_by(parse_ident(), eat_exact(token.TokenComma)))
 
   case names {
@@ -383,7 +383,7 @@ fn parse_function_declaration() -> Parser(ast.Declaration, r) {
   ))
 }
 
-pub fn parse_program(tokens: List(Token)) -> Result(ast.Program, String) {
+pub fn parse_program(tokens: List(token.Token)) -> Result(ast.Program, String) {
   let p = {
     use program <- perform(many(parse_declaration()))
     eat_newlines(pure(program))

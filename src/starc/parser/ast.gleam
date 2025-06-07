@@ -3,14 +3,17 @@ import gleam/option.{type Option}
 pub type Identifier =
   String
 
+pub type TypeId =
+  Identifier
+
 pub type Program =
   List(Declaration)
 
 pub type Declaration {
   FunctionDeclaration(
     name: Identifier,
-    parameters: List(#(Identifier, Type)),
-    result: Option(Type),
+    parameters: List(#(Identifier, TypeId)),
+    result: Option(TypeId),
     body: Block,
   )
 }
@@ -21,7 +24,7 @@ pub type Block =
 pub type Statement {
   ReturnStatement(Expression)
   CallStatement(Expression)
-  DefineStatement(name: Expression, ty: Option(Type), expr: Expression)
+  DefineStatement(name: Expression, ty: Option(TypeId), expr: Expression)
   AssignStatement(cell: Expression, expr: Expression)
   IfStatement(
     condition: Expression,
@@ -30,9 +33,6 @@ pub type Statement {
     elseblock: Option(Block),
   )
 }
-
-pub type Type =
-  Identifier
 
 pub type Expression {
   IntExpr(Int)
