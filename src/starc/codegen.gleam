@@ -5,7 +5,7 @@ import gleam/pair
 import gleam/result
 
 import starc/parser/ast
-import starc/sa/ir
+import starc/codegen/ir
 
 type Environment =
   List(Frame)
@@ -71,7 +71,32 @@ fn resolve_symbol(
   |> result.replace_error(UnknownSymbol(id))
 }
 
-pub fn analyze(tree: ast.Program) -> Result(ir.Program, Error) {
+fn generate_procedure(env: Environment, declaration: ast.Declaration) -> Result(ir.Procedure, Error) {
+  use ty <- result.try(resolve_symbol(env, declaration.name))
+  let assert Some(ir.Function(args: arg_types, return: return_type)) = ty
+  let arg_ids = list.map(declaration.parameters, pair.first)
+
+  let env = push_frame(env)
+
+  use env <- result.try(
+    list.try_fold(
+      list.zip(arg_ids, arg_types),
+      env,
+      fn(env, x) {
+        let #(id, ty) = x
+        case resolve_symbol(env, id) {
+          Ok(_) -> Error(DuplicateSymbol(id))
+          Error(_) -> Ok(insert_symbol(env, id, Some(ty)))
+        }
+      },
+    ),
+  )
+
+  echo env
+  todo
+}
+
+pub fn generate_program(tree: ast.Program) -> Result(ir.Program, Error) {
   let env = [builtin()]
 
   use env <- result.try(
@@ -102,33 +127,5 @@ pub fn analyze(tree: ast.Program) -> Result(ir.Program, Error) {
     }),
   )
 
-  use _ <- result.try(
-    list.try_map(tree, fn(declaration) {
-      use ty <- result.try(resolve_symbol(env, declaration.name))
-      let assert Some(ir.Function(args:, return:)) = ty
-
-      let env = push_frame(env)
-
-      use env <- result.try(
-        list.try_fold(
-          list.zip(list.map(declaration.parameters, pair.first), args),
-          env,
-          fn(env, x) {
-            let #(id, ty) = x
-            case resolve_symbol(env, id) {
-              Ok(_) -> Error(DuplicateSymbol(id))
-              Error(_) -> Ok(insert_symbol(env, id, Some(ty)))
-            }
-          },
-        ),
-      )
-
-      echo env
-
-      let env = pop_frame(env)
-      todo
-    }),
-  )
-
-  todo
+  list.try_map(tree, generate_procedure(env, _))
 }

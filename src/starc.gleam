@@ -5,13 +5,13 @@ import simplifile
 
 import starc/lexer
 import starc/parser
-import starc/sa
+import starc/codegen
 
 type Error {
   FileError(simplifile.FileError)
   LexerError(lexer.LexerError)
   ParserError(String)
-  SemanticError(sa.Error)
+  SemanticError(codegen.Error)
 }
 
 pub fn main() {
@@ -31,12 +31,12 @@ pub fn main() {
       |> result.map_error(ParserError),
     )
 
-    use _ <- result.try(
-      sa.analyze(tree)
+    use ir <- result.try(
+      codegen.generate_program(tree)
       |> result.map_error(SemanticError),
     )
 
-    Ok(tree)
+    Ok(ir)
   }
 
   case res {

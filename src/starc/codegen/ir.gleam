@@ -1,8 +1,8 @@
 pub type Program =
-  List(Declaration)
+  List(Procedure)
 
-pub type Declaration {
-  FunctionDeclaration(label: String, ty: Type, body: List(Statement))
+pub type Procedure {
+  Procedure(label: String, ty: Type, body: List(Statement))
 }
 
 pub type Statement {
@@ -23,6 +23,6 @@ pub fn size_of(ty: Type) -> Int {
     Int -> 4
     Float -> 4
     Bool -> 1
-    Function(..) -> 8
+    Function(..) -> panic
   }
 }
