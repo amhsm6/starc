@@ -1,12 +1,25 @@
 pub type Program =
-  List(Procedure)
+  List(Function)
 
-pub type Procedure {
-  Procedure(label: String, ty: Type, body: List(Statement))
+pub type Function {
+  Function(label: String, body: List(Statement))
 }
 
 pub type Statement {
-  StackPush
+  ReserveStack(bytes: Int)
+  ClearStack(bytes: Int)
+
+  Load(reg: Register, addr: Int)
+  Store(addr: Int, reg: Register)
+}
+
+pub type Register {
+  RAX
+  RBX
+  RCX
+  RDX
+  RDI
+  RSI
 }
 
 pub type Type {
@@ -14,7 +27,6 @@ pub type Type {
   Int
   Float
   Bool
-  Function(args: List(Type), return: Type)
 }
 
 pub fn size_of(ty: Type) -> Int {
@@ -23,6 +35,5 @@ pub fn size_of(ty: Type) -> Int {
     Int -> 4
     Float -> 4
     Bool -> 1
-    Function(..) -> panic
   }
 }

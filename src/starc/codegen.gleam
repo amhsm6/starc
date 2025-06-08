@@ -4,17 +4,26 @@ import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/result
 
-import starc/parser/ast
 import starc/codegen/ir
+import starc/parser/ast
 
 type Environment =
   List(Frame)
 
 type Frame {
   Frame(
-    symbols: Dict(ast.Identifier, Option(ir.Type)),
+    symbols: Dict(ast.Identifier, Symbol),
     types: Dict(ast.Identifier, ir.Type),
   )
+}
+
+type Symbol {
+  Function(
+    label: String,
+    args: List(#(ast.Identifier, ir.Type)),
+    return: ir.Type,
+  )
+  Variable(address: Int, ty: Option(ir.Type))
 }
 
 pub type Error {
@@ -28,7 +37,10 @@ pub type Error {
 fn builtin() -> Frame {
   Frame(
     symbols: dict.from_list([
-      #("print_bool", Some(ir.Function(args: [ir.Bool], return: ir.Void))),
+      #(
+        "print_bool",
+        Function(label: "print_bool", args: [#("x", ir.Bool)], return: ir.Void),
+      ),
     ]),
     types: dict.from_list([
       #("int", ir.Int),
@@ -51,7 +63,7 @@ fn pop_frame(env: Environment) -> Environment {
 fn insert_symbol(
   env: Environment,
   id: ast.Identifier,
-  ty: Option(ir.Type),
+  ty: Symbol,
 ) -> Environment {
   let assert [f, ..rest] = env
   let symbols = dict.insert(f.symbols, id, ty)
@@ -63,33 +75,30 @@ fn resolve_type(env: Environment, id: ast.TypeId) -> Result(ir.Type, Error) {
   |> result.replace_error(UnknownType(id))
 }
 
-fn resolve_symbol(
-  env: Environment,
-  id: ast.Identifier,
-) -> Result(Option(ir.Type), Error) {
+fn resolve_symbol(env: Environment, id: ast.Identifier) -> Result(Symbol, Error) {
   list.find_map(env, fn(f) { dict.get(f.symbols, id) })
   |> result.replace_error(UnknownSymbol(id))
 }
 
-fn generate_procedure(env: Environment, declaration: ast.Declaration) -> Result(ir.Procedure, Error) {
-  use ty <- result.try(resolve_symbol(env, declaration.name))
-  let assert Some(ir.Function(args: arg_types, return: return_type)) = ty
-  let arg_ids = list.map(declaration.parameters, pair.first)
+fn generate_function(
+  env: Environment,
+  declaration: ast.Declaration,
+) -> Result(ir.Function, Error) {
+  let assert ast.FunctionDeclaration(name:, body:, ..) = declaration
+
+  use sym <- result.try(resolve_symbol(env, name))
+  let assert Function(label:, args:, return:) = sym
 
   let env = push_frame(env)
 
   use env <- result.try(
-    list.try_fold(
-      list.zip(arg_ids, arg_types),
-      env,
-      fn(env, x) {
-        let #(id, ty) = x
-        case resolve_symbol(env, id) {
-          Ok(_) -> Error(DuplicateSymbol(id))
-          Error(_) -> Ok(insert_symbol(env, id, Some(ty)))
-        }
-      },
-    ),
+    list.try_fold(args, env, fn(env, x) {
+      let #(id, ty) = x
+      case resolve_symbol(env, id) {
+        Ok(_) -> Error(DuplicateSymbol(id))
+        Error(_) -> Ok(insert_symbol(env, id, Variable(0, Some(ty))))
+      }
+    }),
   )
 
   echo env
@@ -106,20 +115,20 @@ pub fn generate_program(tree: ast.Program) -> Result(ir.Program, Error) {
           case resolve_symbol(env, name) {
             Ok(_) -> Error(DuplicateSymbol(name))
             Error(_) -> {
-              use param_types <- result.try(
+              use args <- result.try(
                 list.try_map(parameters, fn(x) {
-                  resolve_type(env, pair.second(x))
+                  let #(id, typeid) = x
+                  use ty <- result.try(resolve_type(env, typeid))
+                  Ok(#(id, ty))
                 }),
               )
-              use return_type <- result.try(
+
+              use return <- result.try(
                 option.map(result, resolve_type(env, _))
                 |> option.unwrap(Ok(ir.Void)),
               )
-              Ok(insert_symbol(
-                env,
-                name,
-                Some(ir.Function(args: param_types, return: return_type)),
-              ))
+
+              Ok(insert_symbol(env, name, Function(label: name, args:, return:)))
             }
           }
         }
@@ -127,5 +136,5 @@ pub fn generate_program(tree: ast.Program) -> Result(ir.Program, Error) {
     }),
   )
 
-  list.try_map(tree, generate_procedure(env, _))
+  list.try_map(tree, generate_function(env, _))
 }
