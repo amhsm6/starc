@@ -27,6 +27,7 @@ pub type Type {
   Int
   Float
   Bool
+  Pointer(Type)
 }
 
 pub fn size_of(ty: Type) -> Int {
@@ -35,5 +36,6 @@ pub fn size_of(ty: Type) -> Int {
     Int -> 4
     Float -> 4
     Bool -> 1
+    Pointer(..) -> 8
   }
 }
