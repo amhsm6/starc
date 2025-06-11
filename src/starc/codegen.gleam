@@ -7,7 +7,7 @@ import starc/codegen/ir
 import starc/parser/ast
 
 type Environment {
-  Environment(frames: List(Frame), stack_offset: Int)
+  Environment(frames: List(Frame), frame_offset: Int)
 }
 
 type Frame {
@@ -23,7 +23,7 @@ type Symbol {
     args: List(#(ast.Identifier, ir.Type)),
     return: ir.Type,
   )
-  Variable(stack_offset: Int, ty: ir.Type)
+  Variable(frame_offset: Int, ty: ir.Type)
 }
 
 pub type Error {
@@ -42,11 +42,7 @@ fn builtin() -> Frame {
         Function(label: "print_bool", args: [#("x", ir.Bool)], return: ir.Void),
       ),
     ]),
-    types: dict.from_list([
-      #("int", ir.Int),
-      #("float", ir.Float),
-      #("Bool", ir.Bool),
-    ]),
+    types: dict.from_list([#("int", ir.Int), #("bool", ir.Bool)]),
   )
 }
 
@@ -60,8 +56,16 @@ fn pop_frame(env: Environment) -> Environment {
   Environment(..env, frames:)
 }
 
-fn reset_stack(env: Environment) -> Environment {
-  Environment(..env, stack_offset: 0)
+fn set_frame_offset(env: Environment, frame_offset: Int) -> Environment {
+  Environment(..env, frame_offset:)
+}
+
+fn add_frame_offset(env: Environment, offset: Int) -> Environment {
+  Environment(..env, frame_offset: env.frame_offset + offset)
+}
+
+fn sub_frame_offset(env: Environment, offset: Int) -> Environment {
+  Environment(..env, frame_offset: env.frame_offset - offset)
 }
 
 fn insert_symbol(
@@ -69,25 +73,10 @@ fn insert_symbol(
   id: ast.Identifier,
   sym: Symbol,
 ) -> Environment {
-  let assert Environment(frames: [frame, ..rest], stack_offset:) = env
-
-  case sym {
-    Variable(ty:, ..) -> {
-      let symbols =
-        dict.insert(frame.symbols, id, Variable(..sym, stack_offset:))
-      let frame = Frame(..frame, symbols:)
-
-      let stack_offset = stack_offset + ir.size_of(ty)
-
-      Environment(frames: [frame, ..rest], stack_offset:)
-    }
-
-    _ -> {
-      let symbols = dict.insert(frame.symbols, id, sym)
-      let frame = Frame(..frame, symbols:)
-      Environment(..env, frames: [frame, ..rest])
-    }
-  }
+  let assert [frame, ..rest] = env.frames
+  let symbols = dict.insert(frame.symbols, id, sym)
+  let frame = Frame(..frame, symbols:)
+  Environment(..env, frames: [frame, ..rest])
 }
 
 fn resolve_type(env: Environment, id: ast.TypeId) -> Result(ir.Type, Error) {
@@ -150,46 +139,16 @@ fn analyze_expression(
       }
     }
 
-    ast.AddExpr(e1, e2) -> {
+    ast.AddExpr(e1, e2)
+    | ast.SubExpr(e1, e2)
+    | ast.MulExpr(e1, e2)
+    | ast.DivExpr(e1, e2) -> {
       use ty1 <- result.try(analyze_expression(env, e1))
       use ty2 <- result.try(analyze_expression(env, e2))
       case ty1, ty2 {
-        ir.Void, _ | _, ir.Void -> Error(TypeError("Cannot add void"))
+        ir.Void, _ | _, ir.Void ->
+          Error(TypeError("Cannot perform math on void"))
         ir.Int, ir.Int -> Ok(ir.Int)
-        ir.Int, ir.Float | ir.Float, ir.Int -> Ok(ir.Float)
-        _, _ -> Error(TypeError("Type mismatch"))
-      }
-    }
-
-    ast.SubExpr(e1, e2) -> {
-      use ty1 <- result.try(analyze_expression(env, e1))
-      use ty2 <- result.try(analyze_expression(env, e2))
-      case ty1, ty2 {
-        ir.Void, _ | _, ir.Void -> Error(TypeError("Cannot sub void"))
-        ir.Int, ir.Int -> Ok(ir.Int)
-        ir.Int, ir.Float | ir.Float, ir.Int -> Ok(ir.Float)
-        _, _ -> Error(TypeError("Type mismatch"))
-      }
-    }
-
-    ast.MulExpr(e1, e2) -> {
-      use ty1 <- result.try(analyze_expression(env, e1))
-      use ty2 <- result.try(analyze_expression(env, e2))
-      case ty1, ty2 {
-        ir.Void, _ | _, ir.Void -> Error(TypeError("Cannot mul void"))
-        ir.Int, ir.Int -> Ok(ir.Int)
-        ir.Int, ir.Float | ir.Float, ir.Int -> Ok(ir.Float)
-        _, _ -> Error(TypeError("Type mismatch"))
-      }
-    }
-
-    ast.DivExpr(e1, e2) -> {
-      use ty1 <- result.try(analyze_expression(env, e1))
-      use ty2 <- result.try(analyze_expression(env, e2))
-      case ty1, ty2 {
-        ir.Void, _ | _, ir.Void -> Error(TypeError("Cannot div void"))
-        ir.Int, ir.Int -> Ok(ir.Int)
-        ir.Int, ir.Float | ir.Float, ir.Int -> Ok(ir.Float)
         _, _ -> Error(TypeError("Type mismatch"))
       }
     }
@@ -220,6 +179,104 @@ fn analyze_expression(
   }
 }
 
+fn generate_expression(
+  env: Environment,
+  expr: ast.Expression,
+) -> Result(ir.Value, Error) {
+  case expr {
+    ast.IntExpr(x) -> Ok(ir.Immediate(x))
+
+    ast.BoolExpr(True) -> Ok(ir.Immediate(1))
+    ast.BoolExpr(False) -> Ok(ir.Immediate(0))
+
+    ast.StringExpr(_) -> todo
+
+    ast.VarExpr(id) -> {
+      use sym <- result.try(resolve_symbol(env, id))
+      case sym {
+        Function(..) -> Error(TypeError("Functions cannot be values"))
+        Variable(frame_offset:, ..) -> Ok(ir.FrameOffset(frame_offset))
+      }
+    }
+
+    ast.AddrOfExpr(e) -> {
+      case e {
+        ast.VarExpr(id) -> {
+          use sym <- result.try(resolve_symbol(env, id))
+          case sym {
+            Variable(frame_offset:, ..) -> Ok(ir.Immediate(frame_offset))
+            _ -> Error(TypeError("Can only take address of a variable"))
+          }
+        }
+        _ -> Error(TypeError("Can only take address of a variable"))
+      }
+    }
+
+    ast.DerefExpr(e) -> {
+      use val <- result.try(generate_expression(env, e))
+      Ok(case val {
+        ir.Address(x) -> {
+          todo
+        }
+        ir.FrameOffset(_) -> todo
+        ir.Immediate(x) -> ir.Address(x)
+        ir.Register(_) -> todo
+      })
+    }
+
+    ast.AddExpr(_, _) -> todo
+    ast.CallExpression(f:, args:) -> todo
+    ast.DivExpr(_, _) -> todo
+    ast.EQExpr(_, _) -> todo
+    ast.GEExpr(_, _) -> todo
+    ast.GTExpr(_, _) -> todo
+    ast.LEExpr(_, _) -> todo
+    ast.LTExpr(_, _) -> todo
+    ast.MulExpr(_, _) -> todo
+    ast.NEQExpr(_, _) -> todo
+    ast.NotExpr(_) -> todo
+    ast.SubExpr(_, _) -> todo
+  }
+}
+
+fn generate_statement(
+  env: Environment,
+  statement: ast.Statement,
+) -> Result(#(Environment, List(ir.Statement)), Error) {
+  case statement {
+    ast.DefineStatement(name:, ty: typeid, expr:) -> {
+      let assert ast.VarExpr(id) = name
+
+      use expr_ty <- result.try(analyze_expression(env, expr))
+      use ty <- result.try(case typeid {
+        None -> Ok(expr_ty)
+        Some(typeid) -> {
+          use ty <- result.try(resolve_type(env, typeid))
+          case ty == expr_ty {
+            True -> Ok(ty)
+            False -> Error(TypeError("Type mismatch"))
+          }
+        }
+      })
+
+      let env = sub_frame_offset(env, ir.size_of(expr_ty))
+      let frame_offset = env.frame_offset
+      let env = insert_symbol(env, id, Variable(ty:, frame_offset:))
+
+      todo
+    }
+
+    ast.AssignStatement(cell:, expr:) -> todo
+
+    ast.CallStatement(_) -> todo
+
+    ast.IfStatement(condition:, block:, elseifs:, elseblock:) -> todo
+
+    ast.ReturnStatement(_) -> todo
+  }
+  todo
+}
+
 fn generate_function(
   env: Environment,
   declaration: ast.Declaration,
@@ -229,57 +286,49 @@ fn generate_function(
   use sym <- result.try(resolve_symbol(env, name))
   let assert Function(label:, args:, return:) = sym
 
-  let env = push_frame(env) |> reset_stack()
+  let env = push_frame(env) |> set_frame_offset(16)
 
   use env <- result.try(
     list.try_fold(args, env, fn(env, x) {
       let #(id, ty) = x
       case resolve_symbol(env, id) {
         Ok(_) -> Error(DuplicateSymbol(id))
-        Error(_) -> Ok(insert_symbol(env, id, Variable(0, ty)))
+        Error(_) -> {
+          Ok(
+            insert_symbol(
+              env,
+              id,
+              Variable(frame_offset: env.frame_offset, ty:),
+            )
+            |> add_frame_offset(ir.size_of(ty)),
+          )
+        }
       }
     }),
   )
 
-  use env <- result.try(
-    list.try_fold(body, env, fn(env, statement) {
-      case statement {
-        ast.DefineStatement(name:, ty:, expr:) -> {
-          let assert ast.VarExpr(id) = name
+  let env = set_frame_offset(env, 0)
 
-          use expr_ty <- result.try(analyze_expression(env, expr))
-          case ty {
-            None ->
-              Ok(insert_symbol(env, id, Variable(ty: expr_ty, stack_offset: 0)))
-            Some(typeid) -> {
-              use ty <- result.try(resolve_type(env, typeid))
-              case ty == expr_ty {
-                True ->
-                  Ok(insert_symbol(
-                    env,
-                    id,
-                    Variable(ty: expr_ty, stack_offset: 0),
-                  ))
-                False -> Error(TypeError("Type mismatch"))
-              }
-            }
+  let #(res, body) =
+    list.map_fold(body, Ok(env), fn(prev, statement) {
+      case prev {
+        Error(..) -> #(prev, [])
+        Ok(env) -> {
+          case generate_statement(env, statement) {
+            Error(err) -> #(Error(err), [])
+            Ok(#(env, code)) -> #(Ok(env), code)
           }
         }
-
-        ast.AssignStatement(cell:, expr:) -> todo
-        ast.CallStatement(_) -> todo
-        ast.IfStatement(condition:, block:, elseifs:, elseblock:) -> todo
-        ast.ReturnStatement(_) -> todo
       }
-    }),
-  )
+    })
 
-  echo env
-  todo
+  use env <- result.try(res)
+
+  Ok(ir.Function(label:, body: list.flatten(body)))
 }
 
 pub fn generate_program(tree: ast.Program) -> Result(ir.Program, Error) {
-  let env = Environment(frames: [builtin()], stack_offset: 0)
+  let env = Environment(frames: [builtin()], frame_offset: 0)
 
   use env <- result.try(
     list.try_fold(tree, env, fn(env, declaration) {

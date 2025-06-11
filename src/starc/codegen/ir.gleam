@@ -6,11 +6,17 @@ pub type Function {
 }
 
 pub type Statement {
-  ReserveStack(bytes: Int)
-  ClearStack(bytes: Int)
+  Prologue(reserve_bytes: Int)
+  Epilogue(clear_bytes: Int)
 
-  Load(reg: Register, addr: Int)
-  Store(addr: Int, reg: Register)
+  Move(to: Value, from: Value)
+}
+
+pub type Value {
+  Immediate(Int)
+  Register(Register)
+  FrameOffset(Int)
+  Address(Int)
 }
 
 pub type Register {
@@ -25,7 +31,6 @@ pub type Register {
 pub type Type {
   Void
   Int
-  Float
   Bool
   Pointer(Type)
 }
@@ -34,7 +39,6 @@ pub fn size_of(ty: Type) -> Int {
   case ty {
     Void -> panic
     Int -> 4
-    Float -> 4
     Bool -> 1
     Pointer(..) -> 8
   }

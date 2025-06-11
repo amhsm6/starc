@@ -1,3 +1,4 @@
-fn main(x, y int, z float) {
-    println(true)
+fn main(x, y int, z bool) {
+    //println(true)
+    foo := 5
 }
