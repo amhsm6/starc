@@ -1,11 +1,9 @@
 pub type Program =
-  List(Function)
-
-pub type Function {
-  Function(label: String, body: List(Statement))
-}
+  List(Statement)
 
 pub type Statement {
+  Label(String)
+
   Prologue(reserve_bytes: Int)
   Epilogue(clear_bytes: Int)
 
@@ -21,25 +19,58 @@ pub type Value {
 
 pub type Register {
   RAX
+  EAX
+  AX
+  AH
+  AL
+
   RBX
+  EBX
+  BX
+  BH
+  BL
+
   RCX
+  ECX
+  CX
+  CH
+  CL
+
   RDX
+  EDX
+  DX
+  DH
+  DL
+
   RDI
+  EDI
+  DI
+  DIL
+
   RSI
+  ESI
+  SI
+  SIL
 }
 
 pub type Type {
   Void
-  Int
   Bool
+  Int8
+  Int16
+  Int32
+  Int64
   Pointer(Type)
 }
 
 pub fn size_of(ty: Type) -> Int {
   case ty {
     Void -> panic
-    Int -> 4
     Bool -> 1
+    Int8 -> 1
+    Int16 -> 2
+    Int32 -> 4
+    Int64 -> 8
     Pointer(..) -> 8
   }
 }

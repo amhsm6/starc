@@ -3,15 +3,16 @@ import gleam/result
 import gleam/string
 import simplifile
 
+import starc/codegen
+import starc/codegen/env.{type CodegenError}
 import starc/lexer
 import starc/parser
-import starc/codegen
 
 type Error {
   FileError(simplifile.FileError)
   LexerError(lexer.LexerError)
   ParserError(String)
-  SemanticError(codegen.Error)
+  CodegenError(CodegenError)
 }
 
 pub fn main() {
@@ -33,7 +34,7 @@ pub fn main() {
 
     use ir <- result.try(
       codegen.generate_program(tree)
-      |> result.map_error(SemanticError),
+      |> result.map_error(CodegenError),
     )
 
     Ok(ir)
