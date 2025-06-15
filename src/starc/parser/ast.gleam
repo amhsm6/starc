@@ -109,6 +109,7 @@ pub type Type {
   Int32
   Int64
   Pointer(Type)
+  Function
 }
 
 pub fn size_of(ty: Type) -> Int {
@@ -120,5 +121,6 @@ pub fn size_of(ty: Type) -> Int {
     Int32 -> 4
     Int64 -> 8
     Pointer(..) -> 8
+    Function -> panic
   }
 }

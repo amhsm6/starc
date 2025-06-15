@@ -220,7 +220,7 @@ fn parse_int() -> Parser(ast.Expression, r) {
   )
 
   let assert token.TokenInt(n) = t
-  pure(ast.TypedExpression(expr: ast.IntExpr(n), ty: ast.Int64))
+  pure(ast.UntypedExpression(ast.IntExpr(n)))
 }
 
 fn parse_bool() -> Parser(ast.Expression, r) {
@@ -235,7 +235,7 @@ fn parse_bool() -> Parser(ast.Expression, r) {
   )
 
   let assert token.TokenBool(b) = t
-  pure(ast.TypedExpression(expr: ast.BoolExpr(b), ty: ast.Bool))
+  pure(ast.UntypedExpression(ast.BoolExpr(b)))
 }
 
 fn parse_string() -> Parser(ast.Expression, r) {

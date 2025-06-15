@@ -1,4 +1,6 @@
 fn main(x, y int32, z bool) {
-    //println(true)
     foo := 5
+    bar := &foo
+    bar := &bar
+    baz := **bar
 }
