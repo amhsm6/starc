@@ -7,7 +7,7 @@ import starc/lexer/token
 import starc/parser/ast
 import starc/parser/core.{
   type Parser, Message, block_newline, die, eat, eat_exact, eat_newlines, expect,
-  ignore_newline, many, maybe, oneof, parse, perform, pure, sep_by, try,
+  ignore_newline, many, map, maybe, oneof, parse, perform, pure, sep_by, try,
 }
 
 // ================= BASIC =================
@@ -27,7 +27,7 @@ fn parse_ident() -> Parser(ast.Identifier, r) {
   pure(id)
 }
 
-fn parse_type() -> Parser(ast.TypeId, r) {
+fn parse_typeid() -> Parser(ast.TypeId, r) {
   use t <- perform(
     eat(fn(t) {
       case t {
@@ -71,12 +71,12 @@ fn parse_expression() -> Parser(ast.Expression, r) {
     list.fold(next, expr, fn(e1, x) {
       let #(token, e2) = x
       case token {
-        token.TokenEquals -> ast.EQExpr(e1, e2)
-        token.TokenNotEquals -> ast.NEQExpr(e1, e2)
-        token.TokenLT -> ast.LTExpr(e1, e2)
-        token.TokenLE -> ast.LEExpr(e1, e2)
-        token.TokenGT -> ast.GTExpr(e1, e2)
-        token.TokenGE -> ast.GEExpr(e1, e2)
+        token.TokenEquals -> ast.UntypedExpression(ast.EQExpr(e1, e2))
+        token.TokenNotEquals -> ast.UntypedExpression(ast.NEQExpr(e1, e2))
+        token.TokenLT -> ast.UntypedExpression(ast.LTExpr(e1, e2))
+        token.TokenLE -> ast.UntypedExpression(ast.LEExpr(e1, e2))
+        token.TokenGT -> ast.UntypedExpression(ast.GTExpr(e1, e2))
+        token.TokenGE -> ast.UntypedExpression(ast.GEExpr(e1, e2))
         _ -> panic
       }
     }),
@@ -106,8 +106,8 @@ fn parse_additive_expression() -> Parser(ast.Expression, r) {
     list.fold(next, expr, fn(e1, item) {
       let #(token, e2) = item
       case token {
-        token.TokenPlus -> ast.AddExpr(e1, e2)
-        token.TokenMinus -> ast.SubExpr(e1, e2)
+        token.TokenPlus -> ast.UntypedExpression(ast.AddExpr(e1, e2))
+        token.TokenMinus -> ast.UntypedExpression(ast.SubExpr(e1, e2))
         _ -> panic
       }
     }),
@@ -137,8 +137,8 @@ fn parse_multiplicative_expression() -> Parser(ast.Expression, r) {
     list.fold(next, expr, fn(e1, item) {
       let #(token, e2) = item
       case token {
-        token.TokenStar -> ast.MulExpr(e1, e2)
-        token.TokenSlash -> ast.DivExpr(e1, e2)
+        token.TokenStar -> ast.UntypedExpression(ast.MulExpr(e1, e2))
+        token.TokenSlash -> ast.UntypedExpression(ast.DivExpr(e1, e2))
         _ -> panic
       }
     }),
@@ -172,7 +172,7 @@ fn parse_call_expression() -> Parser(ast.Expression, r) {
   )
   eat_newlines({
     use _ <- perform(eat_exact(token.TokenRParen))
-    pure(ast.CallExpression(f: function, args:))
+    pure(ast.UntypedExpression(ast.CallExpression(f: function, args:)))
   })
 }
 
@@ -188,24 +188,24 @@ fn parse_nested_expression() -> Parser(ast.Expression, r) {
 fn parse_not_expression() -> Parser(ast.Expression, r) {
   use _ <- perform(eat_exact(token.TokenBang))
   use expr <- perform(parse_primary_expression())
-  pure(ast.NotExpr(expr))
+  pure(ast.UntypedExpression(ast.NotExpr(expr)))
 }
 
 fn parse_addrof_expression() -> Parser(ast.Expression, r) {
   use _ <- perform(eat_exact(token.TokenAmpersand))
   use expr <- perform(parse_primary_expression())
-  pure(ast.AddrOfExpr(expr))
+  pure(ast.UntypedExpression(ast.AddrOfExpr(expr)))
 }
 
 fn parse_deref_expression() -> Parser(ast.Expression, r) {
   use _ <- perform(eat_exact(token.TokenStar))
   use expr <- perform(parse_primary_expression())
-  pure(ast.DerefExpr(expr))
+  pure(ast.UntypedExpression(ast.DerefExpr(expr)))
 }
 
 fn parse_var_expression() -> Parser(ast.Expression, r) {
   use id <- perform(parse_ident())
-  pure(ast.VarExpr(id))
+  pure(ast.UntypedExpression(ast.VarExpr(id)))
 }
 
 fn parse_int() -> Parser(ast.Expression, r) {
@@ -220,7 +220,7 @@ fn parse_int() -> Parser(ast.Expression, r) {
   )
 
   let assert token.TokenInt(n) = t
-  pure(ast.IntExpr(n))
+  pure(ast.TypedExpression(expr: ast.IntExpr(n), ty: ast.Int64))
 }
 
 fn parse_bool() -> Parser(ast.Expression, r) {
@@ -235,7 +235,7 @@ fn parse_bool() -> Parser(ast.Expression, r) {
   )
 
   let assert token.TokenBool(b) = t
-  pure(ast.BoolExpr(b))
+  pure(ast.TypedExpression(expr: ast.BoolExpr(b), ty: ast.Bool))
 }
 
 fn parse_string() -> Parser(ast.Expression, r) {
@@ -250,7 +250,7 @@ fn parse_string() -> Parser(ast.Expression, r) {
   )
 
   let assert token.TokenString(s) = t
-  pure(ast.StringExpr(s))
+  pure(ast.UntypedExpression(ast.StringExpr(s)))
 }
 
 // ================= STATEMENT =================
@@ -269,7 +269,7 @@ fn parse_return_statement() -> Parser(ast.Statement, r) {
   use _ <- perform(eat_exact(token.TokenReturn))
   block_newline(
     parse_expression()
-    |> core.map(ast.ReturnStatement),
+    |> map(fn(e) { ast.UntypedStatement(ast.UntypedReturnStatement(e)) }),
   )
 }
 
@@ -286,30 +286,32 @@ fn parse_assign_statement() -> Parser(ast.Statement, r) {
 
   block_newline({
     use expr <- perform(parse_expression())
-    pure(ast.AssignStatement(cell:, expr:))
+    pure(ast.UntypedStatement(ast.UntypedAssignStatement(cell:, expr:)))
   })
 }
 
 fn parse_define_statement() -> Parser(ast.Statement, r) {
-  use #(name, ty) <- perform(
+  use #(name, typeid) <- perform(
     try({
       use name <- perform(parse_var_expression())
-      use ty <- perform(maybe(parse_type()))
+      use typeid <- perform(maybe(parse_typeid()))
       use _ <- perform(eat_exact(token.TokenDefine))
-      pure(#(name, ty))
+      pure(#(name, typeid))
     }),
   )
 
   block_newline({
     use expr <- perform(parse_expression())
-    pure(ast.DefineStatement(name:, ty:, expr:))
+    pure(
+      ast.UntypedStatement(ast.UntypedDefineStatement(name:, typeid:, expr:)),
+    )
   })
 }
 
 fn parse_call_statement() -> Parser(ast.Statement, r) {
   eat_newlines({
     use expr <- perform(block_newline(parse_call_expression()))
-    pure(ast.CallStatement(expr))
+    pure(ast.UntypedStatement(ast.UntypedCallStatement(expr)))
   })
 }
 
@@ -334,7 +336,14 @@ fn parse_if_statement() -> Parser(ast.Statement, r) {
     }),
   )
 
-  pure(ast.IfStatement(condition:, block:, elseifs:, elseblock:))
+  pure(
+    ast.UntypedStatement(ast.UntypedIfStatement(
+      condition:,
+      block:,
+      elseifs:,
+      elseblock:,
+    )),
+  )
 }
 
 fn parse_block() -> Parser(ast.Block, r) {
@@ -356,8 +365,8 @@ fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.TypeId)), r) {
   case names {
     [] -> die()
     names -> {
-      use ty <- perform(parse_type())
-      pure(list.map(names, pair.new(_, ty)))
+      use typeid <- perform(parse_typeid())
+      pure(list.map(names, pair.new(_, typeid)))
     }
   }
 }
@@ -371,16 +380,18 @@ fn parse_function_declaration() -> Parser(ast.Declaration, r) {
   use params <- perform(sep_by(parse_parameter(), eat_exact(token.TokenComma)))
   use _ <- perform(eat_exact(token.TokenRParen))
 
-  use ret <- perform(maybe(parse_type()))
+  use ret <- perform(maybe(parse_typeid()))
 
   use body <- perform(parse_block())
 
-  pure(ast.FunctionDeclaration(
-    name:,
-    parameters: list.flatten(params),
-    result: ret,
-    body:,
-  ))
+  pure(
+    ast.UntypedDeclaration(ast.UntypedFunctionDeclaration(
+      name:,
+      parameters: list.flatten(params),
+      result: ret,
+      body:,
+    )),
+  )
 }
 
 pub fn parse_program(tokens: List(token.Token)) -> Result(ast.Program, String) {

@@ -10,7 +10,12 @@ pub type Program =
   List(Declaration)
 
 pub type Declaration {
-  FunctionDeclaration(
+  UntypedDeclaration(UntypedDeclaration)
+  TypedDeclaration(TypedDeclaration)
+}
+
+pub type UntypedDeclaration {
+  UntypedFunctionDeclaration(
     name: Identifier,
     parameters: List(#(Identifier, TypeId)),
     result: Option(TypeId),
@@ -18,15 +23,47 @@ pub type Declaration {
   )
 }
 
+pub type TypedDeclaration {
+  TypedFunctionDeclaration(
+    name: Identifier,
+    parameters: List(#(Identifier, Type)),
+    result: Type,
+    body: Block,
+    reserve_bytes: Int,
+  )
+}
+
 pub type Block =
   List(Statement)
 
 pub type Statement {
-  ReturnStatement(Expression)
-  CallStatement(Expression)
-  DefineStatement(name: Expression, ty: Option(TypeId), expr: Expression)
-  AssignStatement(cell: Expression, expr: Expression)
-  IfStatement(
+  UntypedStatement(UntypedStatement)
+  TypedStatement(TypedStatement)
+}
+
+pub type UntypedStatement {
+  UntypedReturnStatement(Expression)
+  UntypedCallStatement(Expression)
+  UntypedDefineStatement(
+    name: Expression,
+    typeid: Option(TypeId),
+    expr: Expression,
+  )
+  UntypedAssignStatement(cell: Expression, expr: Expression)
+  UntypedIfStatement(
+    condition: Expression,
+    block: Block,
+    elseifs: List(#(Expression, Block)),
+    elseblock: Option(Block),
+  )
+}
+
+pub type TypedStatement {
+  TypedReturnStatement(Expression)
+  TypedCallStatement(Expression)
+  TypedDefineStatement(name: Expression, expr: Expression)
+  TypedAssignStatement(cell: Expression, expr: Expression)
+  TypedIfStatement(
     condition: Expression,
     block: Block,
     elseifs: List(#(Expression, Block)),
@@ -35,6 +72,11 @@ pub type Statement {
 }
 
 pub type Expression {
+  TypedExpression(expr: UntypedExpression, ty: Type)
+  UntypedExpression(UntypedExpression)
+}
+
+pub type UntypedExpression {
   IntExpr(Int)
   BoolExpr(Bool)
   StringExpr(String)
@@ -57,4 +99,26 @@ pub type Expression {
   DerefExpr(Expression)
 
   CallExpression(f: Expression, args: List(Expression))
+}
+
+pub type Type {
+  Void
+  Bool
+  Int8
+  Int16
+  Int32
+  Int64
+  Pointer(Type)
+}
+
+pub fn size_of(ty: Type) -> Int {
+  case ty {
+    Void -> panic
+    Bool -> 1
+    Int8 -> 1
+    Int16 -> 2
+    Int32 -> 4
+    Int64 -> 8
+    Pointer(..) -> 8
+  }
 }

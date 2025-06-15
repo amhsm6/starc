@@ -52,25 +52,3 @@ pub type Register {
   SI
   SIL
 }
-
-pub type Type {
-  Void
-  Bool
-  Int8
-  Int16
-  Int32
-  Int64
-  Pointer(Type)
-}
-
-pub fn size_of(ty: Type) -> Int {
-  case ty {
-    Void -> panic
-    Bool -> 1
-    Int8 -> 1
-    Int16 -> 2
-    Int32 -> 4
-    Int64 -> 8
-    Pointer(..) -> 8
-  }
-}

@@ -2,7 +2,6 @@ import gleam/dict.{type Dict}
 import gleam/list
 import gleam/result
 
-import starc/codegen/ir
 import starc/parser/ast
 
 pub type Environment {
@@ -12,17 +11,17 @@ pub type Environment {
 pub type Frame {
   Frame(
     symbols: Dict(ast.Identifier, Symbol),
-    types: Dict(ast.Identifier, ir.Type),
+    types: Dict(ast.Identifier, ast.Type),
   )
 }
 
 pub type Symbol {
   Function(
     label: String,
-    args: List(#(ast.Identifier, ir.Type)),
-    return: ir.Type,
+    args: List(#(ast.Identifier, ast.Type)),
+    return_type: ast.Type,
   )
-  Variable(frame_offset: Int, ty: ir.Type)
+  Variable(frame_offset: Int, ty: ast.Type)
 }
 
 pub type CodegenError {
@@ -38,15 +37,19 @@ pub fn builtin() -> Frame {
     symbols: dict.from_list([
       #(
         "print_bool",
-        Function(label: "print_bool", args: [#("x", ir.Bool)], return: ir.Void),
+        Function(
+          label: "print_bool",
+          args: [#("x", ast.Bool)],
+          return_type: ast.Void,
+        ),
       ),
     ]),
     types: dict.from_list([
-      #("bool", ir.Bool),
-      #("int8", ir.Int8),
-      #("int16", ir.Int16),
-      #("int32", ir.Int32),
-      #("int64", ir.Int64),
+      #("bool", ast.Bool),
+      #("int8", ast.Int8),
+      #("int16", ast.Int16),
+      #("int32", ast.Int32),
+      #("int64", ast.Int64),
     ]),
   )
 }
@@ -88,7 +91,7 @@ pub fn insert_symbol(
 pub fn resolve_type(
   env: Environment,
   id: ast.TypeId,
-) -> Result(ir.Type, CodegenError) {
+) -> Result(ast.Type, CodegenError) {
   list.find_map(env.frames, fn(f) { dict.get(f.types, id) })
   |> result.replace_error(UnknownType(id))
 }

@@ -1,106 +1,14 @@
-import gleam/dict.{type Dict}
-import gleam/list
-import gleam/option.{None, Some}
-import gleam/result
-
+import starc/analyzer
 import starc/codegen/core.{
-  type Generator, assert_unique_symbol, generate, insert_symbol, perform,
-  pop_frame, pure, push_frame, resolve_symbol, resolve_type, set_frame_offset,
-  traverse,
+  type Generator, add_frame_offset, assert_unique_symbol, emit, generate,
+  get_frame_offset, insert_symbol, perform, pop_frame, pure, push_frame,
+  resolve_symbol, resolve_type, set_frame_offset, traverse,
 }
-import starc/codegen/env.{type CodegenError}
+import starc/codegen/env.{type CodegenError, Function, Variable}
 import starc/codegen/ir
 import starc/parser/ast
 
-// fn analyze_expression(
-//   env: Environment,
-//   expr: ast.Expression,
-// ) -> Result(ir.Type, Error) {
-//   case expr {
-//     ast.IntExpr(_) -> Ok(ir.Int)
-//     ast.BoolExpr(_) -> Ok(ir.Bool)
-//     ast.StringExpr(_) -> todo
-
-//     //FIXME?
-//     ast.VarExpr(id) -> {
-//       use sym <- result.try(resolve_symbol(env, id))
-//       case sym {
-//         Function(..) -> Error(TypeError("Functions cannot be values"))
-//         Variable(ty:, ..) -> Ok(ty)
-//       }
-//     }
-
-//     //FIXME
-//     ast.AddrOfExpr(e) -> {
-//       case e {
-//         ast.VarExpr(id) -> {
-//           use sym <- result.try(resolve_symbol(env, id))
-//           case sym {
-//             Variable(ty:, ..) -> Ok(ir.Pointer(ty))
-//             _ -> Error(TypeError("Can only take address of a variable"))
-//           }
-//         }
-//         _ -> Error(TypeError("Can only take address of a variable"))
-//       }
-//     }
-
-//     ast.DerefExpr(e) -> {
-//       use ty <- result.try(analyze_expression(env, e))
-//       case ty {
-//         ir.Pointer(ty) -> Ok(ty)
-//         _ -> Error(TypeError("Can only deref a pointer"))
-//       }
-//     }
-
-//     //FIXME
-//     ast.CallExpression(f:, ..) -> {
-//       let assert ast.VarExpr(id) = f
-//       use sym <- result.try(resolve_symbol(env, id))
-//       case sym {
-//         Function(return:, ..) -> Ok(return)
-//         _ -> Error(TypeError("Can only call a function"))
-//       }
-//     }
-
-//     ast.AddExpr(e1, e2)
-//     | ast.SubExpr(e1, e2)
-//     | ast.MulExpr(e1, e2)
-//     | ast.DivExpr(e1, e2) -> {
-//       use ty1 <- result.try(analyze_expression(env, e1))
-//       use ty2 <- result.try(analyze_expression(env, e2))
-//       case ty1, ty2 {
-//         ir.Void, _ | _, ir.Void ->
-//           Error(TypeError("Cannot perform math on void"))
-//         ir.Int, ir.Int -> Ok(ir.Int)
-//         _, _ -> Error(TypeError("Type mismatch"))
-//       }
-//     }
-
-//     ast.EQExpr(e1, e2)
-//     | ast.NEQExpr(e1, e2)
-//     | ast.GEExpr(e1, e2)
-//     | ast.GTExpr(e1, e2)
-//     | ast.LEExpr(e1, e2)
-//     | ast.LTExpr(e1, e2) -> {
-//       use ty1 <- result.try(analyze_expression(env, e1))
-//       use ty2 <- result.try(analyze_expression(env, e2))
-//       case ty1, ty2 {
-//         ir.Void, _ | _, ir.Void -> Error(TypeError("Cannot compare void"))
-//         ir.Bool, ir.Bool -> Ok(ir.Bool)
-//         _, _ -> Error(TypeError("Type mismatch"))
-//       }
-//     }
-
-//     ast.NotExpr(e) -> {
-//       use ty <- result.try(analyze_expression(env, e))
-//       case ty {
-//         ir.Void -> Error(TypeError("Cannot invert void"))
-//         ir.Bool -> Ok(ir.Bool)
-//         _ -> Error(TypeError("Type mismatch"))
-//       }
-//     }
-//   }
-// }
+// 
 
 // fn generate_expression(
 //   env: Environment,
@@ -162,6 +70,10 @@ import starc/parser/ast
 //   }
 // }
 
+fn generate_statement(statement: ast.Statement) -> Generator(Nil, r) {
+  emit([ir.Prologue(1)])
+}
+
 // fn generate_statement(
 //   env: Environment,
 //   statement: ast.Statement,
@@ -204,24 +116,6 @@ import starc/parser/ast
 //   env: Environment,
 //   declaration: ast.Declaration,
 // ) -> Result(ir.Function, Error) {
-//   use env <- result.try(
-//     list.try_fold(args, env, fn(env, x) {
-//       let #(id, ty) = x
-//       case resolve_symbol(env, id) {
-//         Ok(_) -> Error(DuplicateSymbol(id))
-//         Error(_) -> {
-//           Ok(
-//             insert_symbol(
-//               env,
-//               id,
-//               Variable(frame_offset: env.frame_offset, ty:),
-//             )
-//             |> add_frame_offset(ir.size_of(ty)),
-//           )
-//         }
-//       }
-//     }),
-//   )
 
 //   let env = set_frame_offset(env, 0)
 
@@ -244,44 +138,44 @@ import starc/parser/ast
 // }
 
 fn generate_function(declaration: ast.Declaration) -> Generator(Nil, r) {
-  let assert ast.FunctionDeclaration(name:, body:, ..) = declaration
-
-  use sym <- perform(resolve_symbol(name))
-  let assert env.Function(label:, args:, return:) = sym
+  let assert ast.TypedDeclaration(ast.TypedFunctionDeclaration(
+    name: label,
+    body:,
+    parameters: args,
+    result: return_type,
+    reserve_bytes:,
+  )) = declaration
 
   use _ <- perform(push_frame())
   use _ <- perform(set_frame_offset(16))
 
-  todo
+  use _ <- perform(emit([ir.Label(label), ir.Prologue(reserve_bytes:)]))
+
+  use _ <- perform(
+    traverse(args, fn(x) {
+      let #(id, ty) = x
+      use _ <- perform(assert_unique_symbol(id))
+
+      use frame_offset <- perform(get_frame_offset())
+      use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
+
+      add_frame_offset(ast.size_of(ty))
+    }),
+  )
+
+  use _ <- perform(set_frame_offset(0))
+  use _ <- perform(traverse(body, generate_statement))
+
+  use _ <- perform(emit([ir.Epilogue(clear_bytes: reserve_bytes)]))
+
+  use _ <- perform(pop_frame())
+
+  pure(Nil)
 }
 
 pub fn generate_program(tree: ast.Program) -> Result(ir.Program, CodegenError) {
   let g = {
-    use _ <- perform(
-      traverse(tree, fn(declaration) {
-        case declaration {
-          ast.FunctionDeclaration(name:, parameters:, result:, ..) -> {
-            use _ <- perform(assert_unique_symbol(name))
-
-            use args <- perform(
-              traverse(parameters, fn(x) {
-                let #(id, typeid) = x
-                use ty <- perform(resolve_type(typeid))
-                pure(#(id, ty))
-              }),
-            )
-
-            use return <- perform(case result {
-              None -> pure(ir.Void)
-              Some(typeid) -> resolve_type(typeid)
-            })
-
-            insert_symbol(name, env.Function(label: name, args:, return:))
-          }
-        }
-      }),
-    )
-
+    use tree <- perform(analyzer.analyze_program(tree))
     traverse(tree, generate_function)
   }
 

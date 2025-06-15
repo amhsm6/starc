@@ -100,6 +100,11 @@ pub fn set_frame_offset(frame_offset: Int) -> Generator(Nil, r) {
   set(env.set_frame_offset(env, frame_offset))
 }
 
+pub fn get_frame_offset() -> Generator(Int, r) {
+  use env <- perform(get())
+  pure(env.frame_offset)
+}
+
 pub fn add_frame_offset(offset: Int) -> Generator(Nil, r) {
   use env <- perform(get())
   set(env.add_frame_offset(env, offset))
@@ -115,7 +120,7 @@ pub fn insert_symbol(id: ast.Identifier, sym: Symbol) -> Generator(Nil, r) {
   set(env.insert_symbol(env, id, sym))
 }
 
-pub fn resolve_type(id: ast.TypeId) -> Generator(ir.Type, r) {
+pub fn resolve_type(id: ast.TypeId) -> Generator(ast.Type, r) {
   use env <- perform(get())
   case env.resolve_type(env, id) {
     Ok(ty) -> pure(ty)
