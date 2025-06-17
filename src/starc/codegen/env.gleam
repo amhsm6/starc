@@ -43,6 +43,14 @@ pub fn builtin() -> Frame {
           return_type: ast.Void,
         ),
       ),
+      #(
+        "print_int64",
+        Function(
+          label: "print_int64",
+          args: [#("x", ast.Int64)],
+          return_type: ast.Void,
+        ),
+      ),
     ]),
     types: dict.from_list([
       #("bool", ast.Bool),

@@ -27,7 +27,7 @@
 #
 
 main:
-    lea rsp, [rsp - 4 * 2]
+    lea rsp, dword ptr [rsp - 4 * 2]
 
     mov dword ptr [rsp], 5
 
@@ -42,7 +42,7 @@ main:
     mov rsi, rax
     call printf
 
-    lea rsp, [rsp + 4 * 2]
+    lea rsp, dword ptr [rsp + 4 * 2]
 
     ret
 

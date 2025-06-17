@@ -8,13 +8,17 @@ pub type Statement {
   Epilogue(clear_bytes: Int)
 
   Move(to: Value, from: Value)
+  Lea(to: Value, from: Value)
+
+  Push(Value)
+  Pop(Value)
 }
 
 pub type Value {
   Immediate(Int)
   Register(Register)
-  FrameOffset(Int)
-  Address(Int)
+  LabelAddress(String)
+  Deref(value: Value, offset: Value, multiplier: Int, size: Int)
 }
 
 pub type Register {
@@ -51,4 +55,7 @@ pub type Register {
   ESI
   SI
   SIL
+
+  RBP
+  RSP
 }
