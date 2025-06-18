@@ -10,7 +10,11 @@ msg: .ascii "%d\n\0"
 print_int64:
     mov rdi, offset msg
     mov rsi, qword ptr [rsp + 8]
+
+    mov rbx, rsp
+    and rsp, -16
     call printf
+    mov rsp, rbx
 
     ret
 

@@ -5,7 +5,7 @@ pub type Statement {
   Label(String)
 
   Prologue(reserve_bytes: Int)
-  Epilogue(clear_bytes: Int)
+  Epilogue
 
   Move(to: Value, from: Value)
   Lea(to: Value, from: Value)

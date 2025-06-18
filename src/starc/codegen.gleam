@@ -89,26 +89,19 @@ fn generate_expression(expr: ast.Expression) -> Generator(ir.Value, r) {
       use sym <- perform(resolve_symbol(id))
       let assert Function(label:, return_type:, ..) = sym
 
-      use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
-
       use _ <- perform(
-        emit([ir.Move(ir.Register(ir.RBX), ir.Register(ir.RSP))]),
+        emit([
+          ir.Push(ir.Register(ir.RBX)),
+          ir.Move(ir.Register(ir.RBX), ir.Register(ir.RSP)),
+        ]),
       )
-
-      let return = case return_type {
-        ast.Void -> ir.Immediate(0)
-        _ ->
-          ir.Deref(
-            ir.Register(ir.RSP),
-            ir.Immediate(-ast.size_of(return_type)),
-            1,
-            ast.size_of(return_type),
-          )
-      }
 
       use _ <- perform(case return_type {
         ast.Void -> pure(Nil)
-        _ -> emit([ir.Lea(ir.Register(ir.RSP), return)])
+        _ ->
+          emit([
+            ir.Sub(ir.Register(ir.RSP), ir.Immediate(ast.size_of(return_type))),
+          ])
       })
 
       use _ <- perform(
@@ -120,14 +113,28 @@ fn generate_expression(expr: ast.Expression) -> Generator(ir.Value, r) {
 
       use _ <- perform(emit([ir.Call(ir.LabelAddress(label))]))
 
+      use _ <- perform(case return_type {
+        ast.Void -> pure(Nil)
+        _ ->
+          emit([
+            ir.Move(
+              ir.Register(ir.RAX),
+              ir.Deref(
+                ir.Register(ir.RBX),
+                offset: ir.Immediate(-ast.size_of(return_type)),
+                multiplier: 1,
+                size: ast.size_of(return_type),
+              ),
+            ),
+          ])
+      })
+
       use _ <- perform(
         emit([
           ir.Move(ir.Register(ir.RSP), ir.Register(ir.RBX)),
-          ir.Move(ir.Register(ir.RAX), return),
+          ir.Pop(ir.Register(ir.RBX)),
         ]),
       )
-
-      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
 
       pure(ir.Register(ir.RAX))
     }
@@ -300,12 +307,12 @@ fn generate_function(declaration: ast.Declaration) -> Generator(Nil, r) {
     }),
   )
 
-  use frame_offset <- perform(get_frame_offset())
+  use return_frame_offset <- perform(get_frame_offset())
 
   use _ <- perform(set_frame_offset(0))
-  use _ <- perform(traverse(body, generate_statement(_, frame_offset)))
+  use _ <- perform(traverse(body, generate_statement(_, return_frame_offset)))
 
-  use _ <- perform(emit([ir.Epilogue(clear_bytes: reserve_bytes)]))
+  use _ <- perform(emit([ir.Epilogue]))
 
   use _ <- perform(pop_frame())
 
@@ -361,12 +368,30 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+
     ir.Call(x) ->
       string_tree.concat([string_tree.from_string("call "), serialize_value(x)])
-    ir.Div(to:, from:) -> todo
-    ir.Epilogue(clear_bytes:) ->
+
+    ir.Div(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("push rax\n"),
+        string_tree.from_string("mov rax, "),
+        serialize_value(to),
+        string_tree.from_string("\n"),
+        string_tree.from_string("div "),
+        serialize_value(from),
+        string_tree.from_string("\n"),
+        string_tree.from_string("mov "),
+        serialize_value(to),
+        string_tree.from_string(", rax\n"),
+        string_tree.from_string("pop rax"),
+      ])
+
+    ir.Epilogue ->
       string_tree.from_strings(["mov rsp, rbp\n", "pop rbp\n", "ret"])
+
     ir.Label(x) -> string_tree.from_string(x <> ":")
+
     ir.Lea(to:, from:) ->
       string_tree.concat([
         string_tree.from_string("lea "),
@@ -374,6 +399,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+
     ir.Move(to:, from:) ->
       string_tree.concat([
         string_tree.from_string("mov "),
@@ -381,9 +407,25 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         string_tree.from_string(", "),
         serialize_value(from),
       ])
-    ir.Mul(to:, from:) -> todo
+
+    ir.Mul(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("push rax\n"),
+        string_tree.from_string("mov rax, "),
+        serialize_value(to),
+        string_tree.from_string("\n"),
+        string_tree.from_string("mul "),
+        serialize_value(from),
+        string_tree.from_string("\n"),
+        string_tree.from_string("mov "),
+        serialize_value(to),
+        string_tree.from_string(", rax\n"),
+        string_tree.from_string("pop rax"),
+      ])
+
     ir.Pop(x) ->
       string_tree.concat([string_tree.from_string("pop "), serialize_value(x)])
+
     ir.Prologue(reserve_bytes:) ->
       string_tree.from_strings([
         "push rbp\n",
@@ -391,14 +433,22 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         "sub rsp, ",
         int.to_string(reserve_bytes),
       ])
+
     ir.Push(x) ->
       string_tree.concat([string_tree.from_string("push "), serialize_value(x)])
-    ir.Sub(to:, from:) -> todo
+
+    ir.Sub(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("sub "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+      ])
   }
 }
 
 pub fn serialize_program(code: ir.Program) -> String {
   list.map(code, serialize_statement)
   |> string_tree.join("\n")
-  |> string_tree.to_string
+  |> string_tree.to_string()
 }
