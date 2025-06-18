@@ -1,10 +1,14 @@
+import gleam/int
+import gleam/list
+import gleam/string_tree.{type StringTree}
+
 import starc/analyzer
 import starc/codegen/core.{
-  type Generator, add_frame_offset, assert_unique_symbol, die, emit, generate,
+  type Generator, add_frame_offset, assert_unique_symbol, emit, generate,
   get_frame_offset, insert_symbol, perform, pop_frame, pure, push_frame,
-  resolve_symbol, resolve_type, set_frame_offset, sub_frame_offset, traverse,
+  resolve_symbol, set_frame_offset, sub_frame_offset, traverse,
 }
-import starc/codegen/env.{type CodegenError, Function, TypeError, Variable}
+import starc/codegen/env.{type CodegenError, Function, Variable}
 import starc/codegen/ir
 import starc/parser/ast
 
@@ -21,46 +25,36 @@ fn generate_expression(expr: ast.Expression) -> Generator(ir.Value, r) {
 
     ast.VarExpr(id) -> {
       use sym <- perform(resolve_symbol(id))
-      case sym {
-        Function(..) -> die(TypeError("Functions cannot be values"))
-        Variable(frame_offset:, ..) ->
-          pure(ir.Deref(
-            value: ir.Register(ir.RBP),
-            offset: ir.Immediate(frame_offset),
-            multiplier: 1,
-            size: ast.size_of(ty),
-          ))
-      }
+      let assert Variable(frame_offset:, ..) = sym
+      pure(ir.Deref(
+        value: ir.Register(ir.RBP),
+        offset: ir.Immediate(frame_offset),
+        multiplier: 1,
+        size: ast.size_of(ty),
+      ))
     }
 
     ast.AddrOfExpr(e) -> {
-      let assert ast.TypedExpression(expr:, ..) = e
+      let assert ast.TypedExpression(expr: ast.VarExpr(id), ..) = e
       let assert ast.Pointer(ty) = ty
-      case expr {
-        ast.VarExpr(id) -> {
-          use sym <- perform(resolve_symbol(id))
-          case sym {
-            Variable(frame_offset:, ..) -> {
-              use _ <- perform(
-                emit([
-                  ir.Lea(
-                    ir.Register(ir.RAX),
-                    ir.Deref(
-                      value: ir.Register(ir.RBP),
-                      offset: ir.Immediate(frame_offset),
-                      multiplier: 1,
-                      size: ast.size_of(ty),
-                    ),
-                  ),
-                ]),
-              )
-              pure(ir.Register(ir.RAX))
-            }
-            _ -> die(TypeError("Can only take address of a variable"))
-          }
-        }
-        _ -> die(TypeError("Can only take address of a variable"))
-      }
+
+      use sym <- perform(resolve_symbol(id))
+      let assert Variable(frame_offset:, ..) = sym
+
+      use _ <- perform(
+        emit([
+          ir.Lea(
+            ir.Register(ir.RAX),
+            ir.Deref(
+              value: ir.Register(ir.RBP),
+              offset: ir.Immediate(frame_offset),
+              multiplier: 1,
+              size: ast.size_of(ty),
+            ),
+          ),
+        ]),
+      )
+      pure(ir.Register(ir.RAX))
     }
 
     ast.DerefExpr(e) -> {
@@ -68,11 +62,7 @@ fn generate_expression(expr: ast.Expression) -> Generator(ir.Value, r) {
       case value {
         ir.Deref(..) -> {
           use _ <- perform(
-            emit([
-              ir.Push(ir.Register(ir.RAX)),
-              ir.Move(to: ir.Register(ir.RAX), from: value),
-              ir.Pop(ir.Register(ir.RAX)),
-            ]),
+            emit([ir.Move(to: ir.Register(ir.RAX), from: value)]),
           )
           pure(ir.Deref(
             value: ir.Register(ir.RAX),
@@ -92,12 +82,128 @@ fn generate_expression(expr: ast.Expression) -> Generator(ir.Value, r) {
       }
     }
 
-    ast.CallExpression(f:, args:) -> todo
+    ast.CallExpression(f:, args:) -> {
+      let assert ast.TypedExpression(expr: ast.VarExpr(id), ty: ast.Function) =
+        f
 
-    ast.AddExpr(_, _) -> todo
-    ast.SubExpr(_, _) -> todo
-    ast.MulExpr(_, _) -> todo
-    ast.DivExpr(_, _) -> todo
+      use sym <- perform(resolve_symbol(id))
+      let assert Function(label:, return_type:, ..) = sym
+
+      use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+      use _ <- perform(
+        emit([ir.Move(ir.Register(ir.RBX), ir.Register(ir.RSP))]),
+      )
+
+      let return = case return_type {
+        ast.Void -> ir.Immediate(0)
+        _ ->
+          ir.Deref(
+            ir.Register(ir.RSP),
+            ir.Immediate(-ast.size_of(return_type)),
+            1,
+            ast.size_of(return_type),
+          )
+      }
+
+      use _ <- perform(case return_type {
+        ast.Void -> pure(Nil)
+        _ -> emit([ir.Lea(ir.Register(ir.RSP), return)])
+      })
+
+      use _ <- perform(
+        traverse(list.reverse(args), fn(arg) {
+          use arg <- perform(generate_expression(arg))
+          emit([ir.Push(arg)])
+        }),
+      )
+
+      use _ <- perform(emit([ir.Call(ir.LabelAddress(label))]))
+
+      use _ <- perform(
+        emit([
+          ir.Move(ir.Register(ir.RSP), ir.Register(ir.RBX)),
+          ir.Move(ir.Register(ir.RAX), return),
+        ]),
+      )
+
+      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
+
+      pure(ir.Register(ir.RAX))
+    }
+
+    ast.AddExpr(e1, e2) -> {
+      use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(ir.Register(ir.RBX), e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Add(ir.Register(ir.RBX), e2),
+          ir.Move(ir.Register(ir.RAX), ir.Register(ir.RBX)),
+        ]),
+      )
+
+      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
+
+      pure(ir.Register(ir.RAX))
+    }
+    ast.SubExpr(e1, e2) -> {
+      use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(ir.Register(ir.RBX), e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Sub(ir.Register(ir.RBX), e2),
+          ir.Move(ir.Register(ir.RAX), ir.Register(ir.RBX)),
+        ]),
+      )
+
+      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
+
+      pure(ir.Register(ir.RAX))
+    }
+    ast.MulExpr(e1, e2) -> {
+      use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(ir.Register(ir.RBX), e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Mul(ir.Register(ir.RBX), e2),
+          ir.Move(ir.Register(ir.RAX), ir.Register(ir.RBX)),
+        ]),
+      )
+
+      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
+
+      pure(ir.Register(ir.RAX))
+    }
+    ast.DivExpr(e1, e2) -> {
+      use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(ir.Register(ir.RBX), e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Div(ir.Register(ir.RBX), e2),
+          ir.Move(ir.Register(ir.RAX), ir.Register(ir.RBX)),
+        ]),
+      )
+
+      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
+
+      pure(ir.Register(ir.RAX))
+    }
 
     ast.EQExpr(_, _) -> todo
     ast.NEQExpr(_, _) -> todo
@@ -109,11 +215,19 @@ fn generate_expression(expr: ast.Expression) -> Generator(ir.Value, r) {
   }
 }
 
-fn generate_statement(statement: ast.Statement) -> Generator(Nil, r) {
+fn generate_statement(
+  statement: ast.Statement,
+  return_frame_offset: Int,
+) -> Generator(Nil, r) {
   let assert ast.TypedStatement(statement) = statement
   case statement {
     ast.TypedAssignStatement(cell:, expr:) -> todo
-    ast.TypedCallStatement(expr) -> todo
+
+    ast.TypedCallStatement(expr) -> {
+      use _ <- perform(generate_expression(expr))
+      pure(Nil)
+    }
+
     ast.TypedDefineStatement(name:, expr:) -> {
       let assert ast.TypedExpression(expr: ast.VarExpr(id), ty:) = name
 
@@ -121,83 +235,52 @@ fn generate_statement(statement: ast.Statement) -> Generator(Nil, r) {
       use frame_offset <- perform(get_frame_offset())
       use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
 
+      use expr <- perform(generate_expression(expr))
+      use _ <- perform(
+        emit([
+          ir.Move(
+            ir.Deref(
+              value: ir.Register(ir.RBP),
+              offset: ir.Immediate(frame_offset),
+              multiplier: 1,
+              size: ast.size_of(ty),
+            ),
+            expr,
+          ),
+        ]),
+      )
+
       pure(Nil)
     }
+
     ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:) -> todo
-    ast.TypedReturnStatement(_) -> todo
+
+    ast.TypedReturnStatement(expr) -> {
+      let assert ast.TypedExpression(ty:, ..) = expr
+
+      use expr <- perform(generate_expression(expr))
+      emit([
+        ir.Move(
+          ir.Deref(
+            ir.Register(ir.RBP),
+            ir.Immediate(return_frame_offset),
+            1,
+            ast.size_of(ty),
+          ),
+          expr,
+        ),
+      ])
+    }
   }
 }
-
-// fn generate_statement(
-//   env: Environment,
-//   statement: ast.Statement,
-// ) -> Result(#(Environment, List(ir.Statement)), Error) {
-//   case statement {
-//     ast.DefineStatement(name:, ty: typeid, expr:) -> {
-//       let assert ast.VarExpr(id) = name
-
-//       use expr_ty <- result.try(analyze_expression(env, expr))
-//       use ty <- result.try(case typeid {
-//         None -> Ok(expr_ty)
-//         Some(typeid) -> {
-//           use ty <- result.try(resolve_type(env, typeid))
-//           case ty == expr_ty {
-//             True -> Ok(ty)
-//             False -> Error(TypeError("Type mismatch"))
-//           }
-//         }
-//       })
-
-//       let env = sub_frame_offset(env, ir.size_of(expr_ty))
-//       let frame_offset = env.frame_offset
-//       let env = insert_symbol(env, id, Variable(ty:, frame_offset:))
-
-//       todo
-//     }
-
-//     ast.AssignStatement(cell:, expr:) -> todo
-
-//     ast.CallStatement(_) -> todo
-
-//     ast.IfStatement(condition:, block:, elseifs:, elseblock:) -> todo
-
-//     ast.ReturnStatement(_) -> todo
-//   }
-//   todo
-// }
-
-// fn generate_function(
-//   env: Environment,
-//   declaration: ast.Declaration,
-// ) -> Result(ir.Function, Error) {
-
-//   let env = set_frame_offset(env, 0)
-
-//   let #(res, body) =
-//     list.map_fold(body, Ok(env), fn(prev, statement) {
-//       case prev {
-//         Error(..) -> #(prev, [])
-//         Ok(env) -> {
-//           case generate_statement(env, statement) {
-//             Error(err) -> #(Error(err), [])
-//             Ok(#(env, code)) -> #(Ok(env), code)
-//           }
-//         }
-//       }
-//     })
-
-//   use env <- result.try(res)
-
-//   Ok(ir.Function(label:, body: list.flatten(body)))
-// }
 
 fn generate_function(declaration: ast.Declaration) -> Generator(Nil, r) {
   let assert ast.TypedDeclaration(ast.TypedFunctionDeclaration(
     name: label,
     body:,
     parameters: args,
-    result: return_type,
     reserve_bytes:,
+    ..,
   )) = declaration
 
   use _ <- perform(push_frame())
@@ -217,11 +300,10 @@ fn generate_function(declaration: ast.Declaration) -> Generator(Nil, r) {
     }),
   )
 
-  use _ <- perform(set_frame_offset(0))
-  use _ <- perform(traverse(body, generate_statement))
+  use frame_offset <- perform(get_frame_offset())
 
-  use env <- perform(core.get())
-  echo env
+  use _ <- perform(set_frame_offset(0))
+  use _ <- perform(traverse(body, generate_statement(_, frame_offset)))
 
   use _ <- perform(emit([ir.Epilogue(clear_bytes: reserve_bytes)]))
 
@@ -237,4 +319,86 @@ pub fn generate_program(tree: ast.Program) -> Result(ir.Program, CodegenError) {
   }
 
   generate(g)
+}
+
+fn serialize_value(value: ir.Value) -> StringTree {
+  case value {
+    ir.Immediate(x) -> string_tree.from_string(int.to_string(x))
+    ir.Register(ir.RAX) -> string_tree.from_string("rax")
+    ir.Register(ir.RBX) -> string_tree.from_string("rbx")
+    ir.Register(ir.RSP) -> string_tree.from_string("rsp")
+    ir.Register(ir.RBP) -> string_tree.from_string("rbp")
+    ir.LabelAddress(label) -> string_tree.from_string(label)
+    ir.Deref(value:, offset:, multiplier:, size:) -> {
+      let ptr = case size {
+        1 -> string_tree.from_string("byte ptr")
+        2 -> string_tree.from_string("word ptr")
+        4 -> string_tree.from_string("dword ptr")
+        8 -> string_tree.from_string("qword ptr")
+        _ -> panic
+      }
+      string_tree.concat([
+        ptr,
+        string_tree.from_string(" ["),
+        serialize_value(value),
+        string_tree.from_string(" + "),
+        serialize_value(offset),
+        string_tree.from_string(" * "),
+        string_tree.from_string(int.to_string(multiplier)),
+        string_tree.from_string("]"),
+      ])
+    }
+    _ -> todo
+  }
+}
+
+fn serialize_statement(statement: ir.Statement) -> StringTree {
+  case statement {
+    ir.Add(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("add "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+      ])
+    ir.Call(x) ->
+      string_tree.concat([string_tree.from_string("call "), serialize_value(x)])
+    ir.Div(to:, from:) -> todo
+    ir.Epilogue(clear_bytes:) ->
+      string_tree.from_strings(["mov rsp, rbp\n", "pop rbp\n", "ret"])
+    ir.Label(x) -> string_tree.from_string(x <> ":")
+    ir.Lea(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("lea "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+      ])
+    ir.Move(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("mov "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+      ])
+    ir.Mul(to:, from:) -> todo
+    ir.Pop(x) ->
+      string_tree.concat([string_tree.from_string("pop "), serialize_value(x)])
+    ir.Prologue(reserve_bytes:) ->
+      string_tree.from_strings([
+        "push rbp\n",
+        "mov rbp, rsp\n",
+        "sub rsp, ",
+        int.to_string(reserve_bytes),
+      ])
+    ir.Push(x) ->
+      string_tree.concat([string_tree.from_string("push "), serialize_value(x)])
+    ir.Sub(to:, from:) -> todo
+  }
+}
+
+pub fn serialize_program(code: ir.Program) -> String {
+  list.map(code, serialize_statement)
+  |> string_tree.join("\n")
+  |> string_tree.to_string
 }

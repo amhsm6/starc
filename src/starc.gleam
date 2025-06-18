@@ -37,11 +37,18 @@ pub fn main() {
       |> result.map_error(CodegenError),
     )
 
-    Ok(ir)
+    let assembly = codegen.serialize_program(ir)
+
+    use _ <- result.try(
+      simplifile.write("./test.s", assembly)
+      |> result.map_error(FileError),
+    )
+
+    Ok(Nil)
   }
 
   case res {
-    Ok(program) -> io.println(string.inspect(program))
+    Ok(_) -> Nil
     Error(err) -> io.println("Error: " <> string.inspect(err))
   }
 }

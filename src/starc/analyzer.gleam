@@ -66,6 +66,7 @@ fn analyze_expression(
           use sym <- perform(resolve_symbol(id))
           case sym {
             Function(return_type:, ..) -> {
+              // TODO: check type of args
               use args <- perform(traverse(args, analyze_expression))
               pure(ast.TypedExpression(
                 expr: ast.CallExpression(

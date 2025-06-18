@@ -12,6 +12,13 @@ pub type Statement {
 
   Push(Value)
   Pop(Value)
+
+  Call(Value)
+
+  Add(to: Value, from: Value)
+  Sub(to: Value, from: Value)
+  Mul(to: Value, from: Value)
+  Div(to: Value, from: Value)
 }
 
 pub type Value {
