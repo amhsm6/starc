@@ -12,6 +12,7 @@ import starc/codegen
 import starc/codegen/env.{type CodegenError}
 import starc/lexer
 import starc/parser
+import starc/serializer
 
 type Command {
   Command(input: String)
@@ -54,7 +55,7 @@ fn compile(path: String) -> Result(Nil, String) {
       |> result.map_error(CodegenError),
     )
 
-    let assembly = codegen.serialize_program(ir)
+    let assembly = serializer.serialize_program(ir)
 
     use _ <- result.try(
       simplifile.write(output, assembly)

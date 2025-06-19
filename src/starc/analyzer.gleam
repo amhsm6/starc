@@ -1,9 +1,11 @@
+import gleam/list
 import gleam/option.{None, Some}
+import gleam/pair
 
 import starc/codegen/core.{
-  type Generator, add_frame_offset, assert_unique_symbol, die, emit, generate,
-  get_frame_offset, insert_symbol, perform, pop_frame, pure, push_frame,
-  resolve_symbol, resolve_type, set_frame_offset, sub_frame_offset, traverse,
+  type Generator, add_frame_offset, assert_unique_symbol, die, get_frame_offset,
+  insert_symbol, perform, pop_frame, pure, push_frame, resolve_symbol,
+  resolve_type, set_frame_offset, sub_frame_offset, traverse,
 }
 import starc/codegen/env.{Function, TypeError, Variable}
 import starc/parser/ast
@@ -13,67 +15,68 @@ fn same_type(ty1: ast.Type, ty2: ast.Type) -> Bool {
 }
 
 fn analyze_expression(
-  expression: ast.Expression,
-) -> Generator(ast.Expression, r) {
-  let assert ast.UntypedExpression(expr) = expression
-  case expr {
-    ast.IntExpr(_) -> pure(ast.TypedExpression(expr:, ty: ast.Int64))
-    ast.BoolExpr(_) -> pure(ast.TypedExpression(expr:, ty: ast.Bool))
-    ast.StringExpr(_) -> todo
+  expression: ast.UntypedExpression,
+) -> Generator(ast.TypedExpression, r) {
+  case expression {
+    ast.UntypedIntExpr(x) -> pure(ast.TypedIntExpr(value: x, ty: ast.Int64))
+    ast.UntypedBoolExpr(x) -> pure(ast.TypedBoolExpr(value: x, ty: ast.Bool))
+    ast.UntypedStringExpr(_) -> todo
 
-    ast.VarExpr(id) -> {
+    ast.UntypedVarExpr(id) -> {
       use sym <- perform(resolve_symbol(id))
       case sym {
-        //FIXME?
         Function(..) -> die(TypeError("Functions cannot be values"))
-        Variable(ty:, ..) -> pure(ast.TypedExpression(expr:, ty:))
+        Variable(frame_offset:, ty:) ->
+          pure(ast.TypedVarExpr(id:, ty:, frame_offset:))
       }
     }
 
-    //FIXME
-    ast.AddrOfExpr(e) -> {
-      let assert ast.UntypedExpression(e) = e
+    //TODO: address of other things
+    ast.UntypedAddrOfExpr(e) -> {
+      use e <- perform(analyze_expression(e))
       case e {
-        ast.VarExpr(id) -> {
-          use sym <- perform(resolve_symbol(id))
-          case sym {
-            Variable(ty:, ..) ->
-              pure(ast.TypedExpression(
-                expr: ast.AddrOfExpr(ast.TypedExpression(expr: e, ty:)),
-                ty: ast.Pointer(ty),
-              ))
-            _ -> die(TypeError("Can only take address of a variable"))
-          }
-        }
+        ast.TypedVarExpr(ty:, ..) ->
+          pure(ast.TypedAddrOfExpr(e:, ty: ast.Pointer(ty)))
         _ -> die(TypeError("Can only take address of a variable"))
       }
     }
 
-    ast.DerefExpr(e) -> {
+    ast.UntypedDerefExpr(e) -> {
       use e <- perform(analyze_expression(e))
-      case e {
-        ast.TypedExpression(ty: ast.Pointer(ty), ..) ->
-          pure(ast.TypedExpression(ast.DerefExpr(e), ty:))
+      case ast.type_of(e) {
+        ast.Pointer(ty) -> pure(ast.TypedDerefExpr(e:, ty:))
         _ -> die(TypeError("Can only deref a pointer"))
       }
     }
 
-    //FIXME
-    ast.CallExpression(f:, args:) -> {
-      let assert ast.UntypedExpression(expr) = f
-      case expr {
-        ast.VarExpr(id) -> {
+    ast.UntypedCallExpression(f:, args:) -> {
+      case f {
+        ast.UntypedVarExpr(id) -> {
           use sym <- perform(resolve_symbol(id))
           case sym {
-            Function(return_type:, ..) -> {
-              // TODO: check type of args
+            Function(label:, arg_types:, return_type:) -> {
               use args <- perform(traverse(args, analyze_expression))
-              pure(ast.TypedExpression(
-                expr: ast.CallExpression(
-                  f: ast.TypedExpression(expr:, ty: ast.Function),
-                  args:,
-                ),
+
+              use _ <- perform(case list.strict_zip(args, arg_types) {
+                Ok(pairs) ->
+                  traverse(pairs, fn(pair) {
+                    let #(arg, arg_ty) = pair
+                    case same_type(ast.type_of(arg), arg_ty) {
+                      True -> pure(Nil)
+                      False -> die(TypeError("Argument type mismatch"))
+                    }
+                  })
+                Error(_) -> die(TypeError("Argument count mismatch"))
+              })
+
+              use _ <- perform(sub_frame_offset(ast.size_of(return_type)))
+              use frame_offset <- perform(get_frame_offset())
+
+              pure(ast.TypedCallExpression(
+                label:,
+                args:,
                 ty: return_type,
+                return_frame_offset: frame_offset,
               ))
             }
             _ -> die(TypeError("Can only call a function"))
@@ -84,22 +87,14 @@ fn analyze_expression(
       }
     }
 
-    ast.AddExpr(e1, e2) -> {
+    ast.UntypedAddExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
-
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.AddExpr(e1, e2), ty: ast.Int64))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.AddExpr(e1, e2), ty: ast.Int32))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.AddExpr(e1, e2), ty: ast.Int16))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.AddExpr(e1, e2), ty: ast.Int8))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64 -> pure(ast.TypedAddExpr(e1:, e2:, ty: ast.Int64))
+        ast.Int32, ast.Int32 -> pure(ast.TypedAddExpr(e1:, e2:, ty: ast.Int32))
+        ast.Int16, ast.Int16 -> pure(ast.TypedAddExpr(e1:, e2:, ty: ast.Int16))
+        ast.Int8, ast.Int8 -> pure(ast.TypedAddExpr(e1:, e2:, ty: ast.Int8))
 
         ast.Void, _ | _, ast.Void ->
           die(TypeError("Cannot perform math on void"))
@@ -108,22 +103,14 @@ fn analyze_expression(
       }
     }
 
-    ast.SubExpr(e1, e2) -> {
+    ast.UntypedSubExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
-
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.SubExpr(e1, e2), ty: ast.Int64))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.SubExpr(e1, e2), ty: ast.Int32))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.SubExpr(e1, e2), ty: ast.Int16))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.SubExpr(e1, e2), ty: ast.Int8))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64 -> pure(ast.TypedSubExpr(e1:, e2:, ty: ast.Int64))
+        ast.Int32, ast.Int32 -> pure(ast.TypedSubExpr(e1:, e2:, ty: ast.Int32))
+        ast.Int16, ast.Int16 -> pure(ast.TypedSubExpr(e1:, e2:, ty: ast.Int16))
+        ast.Int8, ast.Int8 -> pure(ast.TypedSubExpr(e1:, e2:, ty: ast.Int8))
 
         ast.Void, _ | _, ast.Void ->
           die(TypeError("Cannot perform math on void"))
@@ -132,22 +119,14 @@ fn analyze_expression(
       }
     }
 
-    ast.MulExpr(e1, e2) -> {
+    ast.UntypedMulExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
-
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.MulExpr(e1, e2), ty: ast.Int64))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.MulExpr(e1, e2), ty: ast.Int32))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.MulExpr(e1, e2), ty: ast.Int16))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.MulExpr(e1, e2), ty: ast.Int8))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64 -> pure(ast.TypedMulExpr(e1:, e2:, ty: ast.Int64))
+        ast.Int32, ast.Int32 -> pure(ast.TypedMulExpr(e1:, e2:, ty: ast.Int32))
+        ast.Int16, ast.Int16 -> pure(ast.TypedMulExpr(e1:, e2:, ty: ast.Int16))
+        ast.Int8, ast.Int8 -> pure(ast.TypedMulExpr(e1:, e2:, ty: ast.Int8))
 
         ast.Void, _ | _, ast.Void ->
           die(TypeError("Cannot perform math on void"))
@@ -156,22 +135,14 @@ fn analyze_expression(
       }
     }
 
-    ast.DivExpr(e1, e2) -> {
+    ast.UntypedDivExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
-
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.DivExpr(e1, e2), ty: ast.Int64))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.DivExpr(e1, e2), ty: ast.Int32))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.DivExpr(e1, e2), ty: ast.Int16))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.DivExpr(e1, e2), ty: ast.Int8))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64 -> pure(ast.TypedDivExpr(e1:, e2:, ty: ast.Int64))
+        ast.Int32, ast.Int32 -> pure(ast.TypedDivExpr(e1:, e2:, ty: ast.Int32))
+        ast.Int16, ast.Int16 -> pure(ast.TypedDivExpr(e1:, e2:, ty: ast.Int16))
+        ast.Int8, ast.Int8 -> pure(ast.TypedDivExpr(e1:, e2:, ty: ast.Int8))
 
         ast.Void, _ | _, ast.Void ->
           die(TypeError("Cannot perform math on void"))
@@ -180,143 +151,110 @@ fn analyze_expression(
       }
     }
 
-    ast.EQExpr(e1, e2) -> {
+    ast.UntypedEQExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
 
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
+      case ast.type_of(e1), ast.type_of(e2) {
         ast.Void, _ | _, ast.Void -> die(TypeError("Cannot compare void"))
 
         ty1, ty2 -> {
           case same_type(ty1, ty2) {
-            True ->
-              pure(ast.TypedExpression(expr: ast.EQExpr(e1, e2), ty: ast.Bool))
+            True -> pure(ast.TypedEQExpr(e1:, e2:, ty: ast.Bool))
             False -> die(TypeError("Type mismatch"))
           }
         }
       }
     }
 
-    ast.NEQExpr(e1, e2) -> {
+    ast.UntypedNEQExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
 
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
+      case ast.type_of(e1), ast.type_of(e2) {
         ast.Void, _ | _, ast.Void -> die(TypeError("Cannot compare void"))
 
         ty1, ty2 -> {
           case same_type(ty1, ty2) {
-            True ->
-              pure(ast.TypedExpression(expr: ast.NEQExpr(e1, e2), ty: ast.Bool))
+            True -> pure(ast.TypedNEQExpr(e1:, e2:, ty: ast.Bool))
             False -> die(TypeError("Type mismatch"))
           }
         }
       }
     }
 
-    ast.GEExpr(e1, e2) -> {
+    ast.UntypedLTExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64
+        | ast.Int32, ast.Int32
+        | ast.Int16, ast.Int16
+        | ast.Int8, ast.Int8
+        -> pure(ast.TypedLTExpr(e1:, e2:, ty: ast.Bool))
 
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.GEExpr(e1, e2), ty: ast.Bool))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.GEExpr(e1, e2), ty: ast.Bool))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.GEExpr(e1, e2), ty: ast.Bool))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.GEExpr(e1, e2), ty: ast.Bool))
-
-        ast.Void, _ | _, ast.Void -> die(TypeError("Cannot compare void"))
+        ast.Void, _ | _, ast.Void ->
+          die(TypeError("Cannot perform math on void"))
 
         _, _ -> die(TypeError("Type mismatch"))
       }
     }
 
-    ast.GTExpr(e1, e2) -> {
+    ast.UntypedLEExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64
+        | ast.Int32, ast.Int32
+        | ast.Int16, ast.Int16
+        | ast.Int8, ast.Int8
+        -> pure(ast.TypedLEExpr(e1:, e2:, ty: ast.Bool))
 
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.GTExpr(e1, e2), ty: ast.Bool))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.GTExpr(e1, e2), ty: ast.Bool))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.GTExpr(e1, e2), ty: ast.Bool))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.GTExpr(e1, e2), ty: ast.Bool))
-
-        ast.Void, _ | _, ast.Void -> die(TypeError("Cannot compare void"))
+        ast.Void, _ | _, ast.Void ->
+          die(TypeError("Cannot perform math on void"))
 
         _, _ -> die(TypeError("Type mismatch"))
       }
     }
 
-    ast.LEExpr(e1, e2) -> {
+    ast.UntypedGTExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64
+        | ast.Int32, ast.Int32
+        | ast.Int16, ast.Int16
+        | ast.Int8, ast.Int8
+        -> pure(ast.TypedGTExpr(e1:, e2:, ty: ast.Bool))
 
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.LEExpr(e1, e2), ty: ast.Bool))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.LEExpr(e1, e2), ty: ast.Bool))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.LEExpr(e1, e2), ty: ast.Bool))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.LEExpr(e1, e2), ty: ast.Bool))
-
-        ast.Void, _ | _, ast.Void -> die(TypeError("Cannot compare void"))
+        ast.Void, _ | _, ast.Void ->
+          die(TypeError("Cannot perform math on void"))
 
         _, _ -> die(TypeError("Type mismatch"))
       }
     }
 
-    ast.LTExpr(e1, e2) -> {
+    ast.UntypedGEExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
+      case ast.type_of(e1), ast.type_of(e2) {
+        ast.Int64, ast.Int64
+        | ast.Int32, ast.Int32
+        | ast.Int16, ast.Int16
+        | ast.Int8, ast.Int8
+        -> pure(ast.TypedGEExpr(e1:, e2:, ty: ast.Bool))
 
-      let assert ast.TypedExpression(ty: ty1, ..) = e1
-      let assert ast.TypedExpression(ty: ty2, ..) = e2
-
-      case ty1, ty2 {
-        ast.Int64, ast.Int64 ->
-          pure(ast.TypedExpression(expr: ast.LTExpr(e1, e2), ty: ast.Bool))
-        ast.Int32, ast.Int32 ->
-          pure(ast.TypedExpression(expr: ast.LTExpr(e1, e2), ty: ast.Bool))
-        ast.Int16, ast.Int16 ->
-          pure(ast.TypedExpression(expr: ast.LTExpr(e1, e2), ty: ast.Bool))
-        ast.Int8, ast.Int8 ->
-          pure(ast.TypedExpression(expr: ast.LTExpr(e1, e2), ty: ast.Bool))
-
-        ast.Void, _ | _, ast.Void -> die(TypeError("Cannot compare void"))
+        ast.Void, _ | _, ast.Void ->
+          die(TypeError("Cannot perform math on void"))
 
         _, _ -> die(TypeError("Type mismatch"))
       }
     }
 
-    ast.NotExpr(e) -> {
+    ast.UntypedNotExpr(e) -> {
       use e <- perform(analyze_expression(e))
-      let assert ast.TypedExpression(ty: ty, ..) = e
-      case ty {
-        ast.Bool -> pure(ast.TypedExpression(expr: ast.NotExpr(e), ty:))
+      case ast.type_of(e) {
+        ast.Bool -> pure(ast.TypedNotExpr(e:, ty: ast.Bool))
         ast.Void -> die(TypeError("Cannot negate void"))
         _ -> die(TypeError("Type mismatch"))
       }
@@ -325,40 +263,34 @@ fn analyze_expression(
 }
 
 fn analyze_statement(
-  statement: ast.Statement,
+  statement: ast.UntypedStatement,
   function_return_type: ast.Type,
-) -> Generator(ast.Statement, r) {
-  let assert ast.UntypedStatement(statement) = statement
+) -> Generator(ast.TypedStatement, r) {
   case statement {
     ast.UntypedAssignStatement(cell:, expr:) -> {
       use cell <- perform(analyze_expression(cell))
       use expr <- perform(analyze_expression(expr))
 
-      let assert ast.TypedExpression(ty: cell_ty, ..) = cell
-      let assert ast.TypedExpression(ty: expr_ty, ..) = expr
-
-      case same_type(cell_ty, expr_ty) {
-        True -> pure(ast.TypedStatement(ast.TypedAssignStatement(cell:, expr:)))
+      case same_type(ast.type_of(cell), ast.type_of(expr)) {
+        True -> pure(ast.TypedAssignStatement(cell:, expr:))
         False -> die(TypeError("Type mismatch in assignment"))
       }
     }
 
     ast.UntypedCallStatement(expr) -> {
       use expr <- perform(analyze_expression(expr))
-      pure(ast.TypedStatement(ast.TypedCallStatement(expr)))
+      pure(ast.TypedCallStatement(expr))
     }
 
     ast.UntypedDefineStatement(name:, typeid:, expr:) -> {
       use expr <- perform(analyze_expression(expr))
-      let assert ast.TypedExpression(expr:, ty:) = expr
-
-      let assert ast.UntypedExpression(ast.VarExpr(id)) = name
+      let expr_ty = ast.type_of(expr)
 
       use ty <- perform(case typeid {
-        None -> pure(ty)
+        None -> pure(expr_ty)
         Some(typeid) -> {
-          use ty2 <- perform(resolve_type(typeid))
-          case same_type(ty, ty2) {
+          use ty <- perform(resolve_type(typeid))
+          case same_type(ty, expr_ty) {
             True -> pure(ty)
             False -> die(TypeError("Type mismatch"))
           }
@@ -367,23 +299,21 @@ fn analyze_statement(
 
       use _ <- perform(sub_frame_offset(ast.size_of(ty)))
       use frame_offset <- perform(get_frame_offset())
-      use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
 
-      pure(
-        ast.TypedStatement(ast.TypedDefineStatement(
-          name: ast.TypedExpression(expr: ast.VarExpr(id), ty:),
-          expr: ast.TypedExpression(expr:, ty:),
-        )),
-      )
+      use _ <- perform(insert_symbol(name, Variable(frame_offset:, ty:)))
+
+      pure(ast.TypedDefineStatement(
+        name: ast.TypedVarExpr(id: name, ty:, frame_offset:),
+        expr:,
+      ))
     }
 
     ast.UntypedIfStatement(condition:, block:, elseifs:, elseblock:) -> todo
 
     ast.UntypedReturnStatement(expr) -> {
       use expr <- perform(analyze_expression(expr))
-      let assert ast.TypedExpression(ty:, ..) = expr
-      case same_type(function_return_type, ty) {
-        True -> pure(ast.TypedStatement(ast.TypedReturnStatement(expr)))
+      case same_type(function_return_type, ast.type_of(expr)) {
+        True -> pure(ast.TypedReturnStatement(expr))
         False -> die(TypeError("Return type mismatch"))
       }
     }
@@ -392,9 +322,8 @@ fn analyze_statement(
 
 // FIXME: declaration only sees items defined above
 fn analyze_declaration(
-  declaration: ast.Declaration,
-) -> Generator(ast.Declaration, r) {
-  let assert ast.UntypedDeclaration(declaration) = declaration
+  declaration: ast.UntypedDeclaration,
+) -> Generator(ast.TypedDeclaration, r) {
   case declaration {
     ast.UntypedFunctionDeclaration(name:, parameters:, result:, body:) -> {
       use _ <- perform(assert_unique_symbol(name))
@@ -414,16 +343,25 @@ fn analyze_declaration(
 
       use _ <- perform(insert_symbol(
         name,
-        Function(label: name, args:, return_type:),
+        Function(
+          label: name,
+          arg_types: list.map(args, pair.second),
+          return_type:,
+        ),
       ))
 
       use _ <- perform(push_frame())
+      use _ <- perform(set_frame_offset(16))
 
       use _ <- perform(
         traverse(args, fn(x) {
           let #(id, ty) = x
           use _ <- perform(assert_unique_symbol(id))
-          insert_symbol(id, Variable(frame_offset: 0, ty:))
+
+          use frame_offset <- perform(get_frame_offset())
+          use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
+
+          add_frame_offset(ast.size_of(ty))
         }),
       )
 
@@ -433,19 +371,17 @@ fn analyze_declaration(
 
       use _ <- perform(pop_frame())
 
-      pure(
-        ast.TypedDeclaration(ast.TypedFunctionDeclaration(
-          name:,
-          parameters: args,
-          result: return_type,
-          body:,
-          reserve_bytes: -frame_offset,
-        )),
-      )
+      pure(ast.TypedFunctionDeclaration(
+        label: name,
+        body:,
+        reserve_bytes: -frame_offset,
+      ))
     }
   }
 }
 
-pub fn analyze_program(tree: ast.Program) -> Generator(ast.Program, r) {
+pub fn analyze_program(
+  tree: ast.UntypedProgram,
+) -> Generator(ast.TypedProgram, r) {
   traverse(tree, analyze_declaration)
 }

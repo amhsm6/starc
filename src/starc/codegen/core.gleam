@@ -94,7 +94,6 @@ pub fn pop_frame() -> Generator(Nil, r) {
   set(env.pop_frame(env))
 }
 
-// FIXME
 pub fn set_frame_offset(frame_offset: Int) -> Generator(Nil, r) {
   use env <- perform(get())
   set(env.set_frame_offset(env, frame_offset))

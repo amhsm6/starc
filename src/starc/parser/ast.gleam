@@ -6,99 +6,114 @@ pub type Identifier =
 pub type TypeId =
   Identifier
 
-pub type Program =
-  List(Declaration)
+pub type UntypedProgram =
+  List(UntypedDeclaration)
 
-pub type Declaration {
-  UntypedDeclaration(UntypedDeclaration)
-  TypedDeclaration(TypedDeclaration)
-}
+pub type TypedProgram =
+  List(TypedDeclaration)
 
 pub type UntypedDeclaration {
   UntypedFunctionDeclaration(
     name: Identifier,
     parameters: List(#(Identifier, TypeId)),
     result: Option(TypeId),
-    body: Block,
+    body: UntypedBlock,
   )
 }
 
 pub type TypedDeclaration {
-  TypedFunctionDeclaration(
-    name: Identifier,
-    parameters: List(#(Identifier, Type)),
-    result: Type,
-    body: Block,
-    reserve_bytes: Int,
-  )
+  TypedFunctionDeclaration(label: String, body: TypedBlock, reserve_bytes: Int)
 }
 
-pub type Block =
-  List(Statement)
+pub type UntypedBlock =
+  List(UntypedStatement)
 
-pub type Statement {
-  UntypedStatement(UntypedStatement)
-  TypedStatement(TypedStatement)
-}
+pub type TypedBlock =
+  List(TypedStatement)
 
 pub type UntypedStatement {
-  UntypedReturnStatement(Expression)
-  UntypedCallStatement(Expression)
+  UntypedReturnStatement(UntypedExpression)
+  UntypedCallStatement(UntypedExpression)
   UntypedDefineStatement(
-    name: Expression,
+    name: Identifier,
     typeid: Option(TypeId),
-    expr: Expression,
+    expr: UntypedExpression,
   )
-  UntypedAssignStatement(cell: Expression, expr: Expression)
+  UntypedAssignStatement(cell: UntypedExpression, expr: UntypedExpression)
   UntypedIfStatement(
-    condition: Expression,
-    block: Block,
-    elseifs: List(#(Expression, Block)),
-    elseblock: Option(Block),
+    condition: UntypedExpression,
+    block: UntypedBlock,
+    elseifs: List(#(UntypedExpression, UntypedBlock)),
+    elseblock: Option(UntypedBlock),
   )
 }
 
 pub type TypedStatement {
-  TypedReturnStatement(Expression)
-  TypedCallStatement(Expression)
-  TypedDefineStatement(name: Expression, expr: Expression)
-  TypedAssignStatement(cell: Expression, expr: Expression)
+  TypedReturnStatement(TypedExpression)
+  TypedCallStatement(TypedExpression)
+  TypedDefineStatement(name: TypedExpression, expr: TypedExpression)
+  TypedAssignStatement(cell: TypedExpression, expr: TypedExpression)
   TypedIfStatement(
-    condition: Expression,
-    block: Block,
-    elseifs: List(#(Expression, Block)),
-    elseblock: Option(Block),
+    condition: TypedExpression,
+    block: TypedBlock,
+    elseifs: List(#(TypedExpression, TypedBlock)),
+    elseblock: Option(TypedBlock),
   )
 }
 
-pub type Expression {
-  TypedExpression(expr: UntypedExpression, ty: Type)
-  UntypedExpression(UntypedExpression)
+pub type UntypedExpression {
+  UntypedIntExpr(Int)
+  UntypedBoolExpr(Bool)
+  UntypedStringExpr(String)
+  UntypedVarExpr(Identifier)
+
+  UntypedAddExpr(UntypedExpression, UntypedExpression)
+  UntypedSubExpr(UntypedExpression, UntypedExpression)
+  UntypedMulExpr(UntypedExpression, UntypedExpression)
+  UntypedDivExpr(UntypedExpression, UntypedExpression)
+
+  UntypedEQExpr(UntypedExpression, UntypedExpression)
+  UntypedNEQExpr(UntypedExpression, UntypedExpression)
+  UntypedLTExpr(UntypedExpression, UntypedExpression)
+  UntypedLEExpr(UntypedExpression, UntypedExpression)
+  UntypedGTExpr(UntypedExpression, UntypedExpression)
+  UntypedGEExpr(UntypedExpression, UntypedExpression)
+
+  UntypedNotExpr(UntypedExpression)
+  UntypedAddrOfExpr(UntypedExpression)
+  UntypedDerefExpr(UntypedExpression)
+
+  UntypedCallExpression(f: UntypedExpression, args: List(UntypedExpression))
 }
 
-pub type UntypedExpression {
-  IntExpr(Int)
-  BoolExpr(Bool)
-  StringExpr(String)
-  VarExpr(Identifier)
+pub type TypedExpression {
+  TypedIntExpr(value: Int, ty: Type)
+  TypedBoolExpr(value: Bool, ty: Type)
+  TypedStringExpr(value: String, ty: Type)
+  TypedVarExpr(id: Identifier, ty: Type, frame_offset: Int)
 
-  AddExpr(Expression, Expression)
-  SubExpr(Expression, Expression)
-  MulExpr(Expression, Expression)
-  DivExpr(Expression, Expression)
+  TypedAddExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedSubExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedMulExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedDivExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
 
-  EQExpr(Expression, Expression)
-  NEQExpr(Expression, Expression)
-  LTExpr(Expression, Expression)
-  LEExpr(Expression, Expression)
-  GTExpr(Expression, Expression)
-  GEExpr(Expression, Expression)
+  TypedEQExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedNEQExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedLTExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedLEExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedGTExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedGEExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
 
-  NotExpr(Expression)
-  AddrOfExpr(Expression)
-  DerefExpr(Expression)
+  TypedNotExpr(e: TypedExpression, ty: Type)
+  TypedAddrOfExpr(e: TypedExpression, ty: Type)
+  TypedDerefExpr(e: TypedExpression, ty: Type)
 
-  CallExpression(f: Expression, args: List(Expression))
+  TypedCallExpression(
+    label: String,
+    args: List(TypedExpression),
+    ty: Type,
+    return_frame_offset: Int,
+  )
 }
 
 pub type Type {
@@ -109,18 +124,43 @@ pub type Type {
   Int32
   Int64
   Pointer(Type)
-  Function
 }
 
 pub fn size_of(ty: Type) -> Int {
   case ty {
-    Void -> panic
+    Void -> 0
     Bool -> 1
     Int8 -> 1
     Int16 -> 2
     Int32 -> 4
     Int64 -> 8
     Pointer(..) -> 8
-    Function -> panic
+  }
+}
+
+pub fn type_of(expr: TypedExpression) -> Type {
+  case expr {
+    TypedIntExpr(ty:, ..) -> ty
+    TypedBoolExpr(ty:, ..) -> ty
+    TypedStringExpr(ty:, ..) -> ty
+    TypedVarExpr(ty:, ..) -> ty
+
+    TypedAddExpr(ty:, ..) -> ty
+    TypedSubExpr(ty:, ..) -> ty
+    TypedMulExpr(ty:, ..) -> ty
+    TypedDivExpr(ty:, ..) -> ty
+
+    TypedEQExpr(ty:, ..) -> ty
+    TypedNEQExpr(ty:, ..) -> ty
+    TypedLTExpr(ty:, ..) -> ty
+    TypedLEExpr(ty:, ..) -> ty
+    TypedGTExpr(ty:, ..) -> ty
+    TypedGEExpr(ty:, ..) -> ty
+
+    TypedNotExpr(ty:, ..) -> ty
+    TypedAddrOfExpr(ty:, ..) -> ty
+    TypedDerefExpr(ty:, ..) -> ty
+
+    TypedCallExpression(ty:, ..) -> ty
   }
 }

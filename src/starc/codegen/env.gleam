@@ -16,11 +16,7 @@ pub type Frame {
 }
 
 pub type Symbol {
-  Function(
-    label: String,
-    args: List(#(ast.Identifier, ast.Type)),
-    return_type: ast.Type,
-  )
+  Function(label: String, arg_types: List(ast.Type), return_type: ast.Type)
   Variable(frame_offset: Int, ty: ast.Type)
 }
 
@@ -39,7 +35,7 @@ pub fn builtin() -> Frame {
         "print_bool",
         Function(
           label: "print_bool",
-          args: [#("x", ast.Bool)],
+          arg_types: [ast.Bool],
           return_type: ast.Void,
         ),
       ),
@@ -47,7 +43,7 @@ pub fn builtin() -> Frame {
         "print_int64",
         Function(
           label: "print_int64",
-          args: [#("x", ast.Int64)],
+          arg_types: [ast.Int64],
           return_type: ast.Void,
         ),
       ),
