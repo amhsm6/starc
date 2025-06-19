@@ -19,7 +19,7 @@ fn analyze_expression(
 ) -> Generator(ast.TypedExpression, r) {
   case expression {
     ast.UntypedIntExpr(x) -> pure(ast.TypedIntExpr(value: x, ty: ast.Int64))
-    ast.UntypedBoolExpr(x) -> pure(ast.TypedBoolExpr(value: x, ty: ast.Bool))
+    ast.UntypedBoolExpr(x) -> pure(ast.TypedBoolExpr(x))
     ast.UntypedStringExpr(_) -> todo
 
     ast.UntypedVarExpr(id) -> {
@@ -75,7 +75,7 @@ fn analyze_expression(
               pure(ast.TypedCallExpression(
                 label:,
                 args:,
-                ty: return_type,
+                return_type:,
                 return_frame_offset: frame_offset,
               ))
             }

@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/pair
 import gleam/string
 
@@ -28,18 +29,14 @@ fn parse_ident() -> Parser(ast.Identifier, r) {
 }
 
 fn parse_typeid() -> Parser(ast.TypeId, r) {
-  use t <- perform(
-    eat(fn(t) {
-      case t {
-        token.TokenIdent(_) -> True
-        _ -> False
-      }
-    })
-    |> expect("type"),
-  )
-
-  let assert token.TokenIdent(id) = t
-  pure(id)
+  use ptr <- perform(maybe(eat_exact(token.TokenStar)))
+  case ptr {
+    None -> parse_ident() |> expect("type") |> map(ast.TypeName)
+    Some(_) -> {
+      parse_typeid()
+      |> map(ast.TypePointer)
+    }
+  }
 }
 
 // ================= EXPRESSION =================

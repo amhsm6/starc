@@ -93,10 +93,18 @@ pub fn insert_symbol(
 
 pub fn resolve_type(
   env: Environment,
-  id: ast.TypeId,
+  typeid: ast.TypeId,
 ) -> Result(ast.Type, CodegenError) {
-  list.find_map(env.frames, fn(f) { dict.get(f.types, id) })
-  |> result.replace_error(UnknownType(id))
+  let resolve_type_name = fn(id) {
+    list.find_map(env.frames, fn(f) { dict.get(f.types, id) })
+    |> result.replace_error(UnknownType(id))
+  }
+
+  case typeid {
+    ast.TypeName(id) -> resolve_type_name(id)
+    ast.TypePointer(typeid) ->
+      resolve_type(env, typeid) |> result.map(ast.Pointer)
+  }
 }
 
 pub fn resolve_symbol(
@@ -119,10 +127,17 @@ pub fn assert_unique_symbol(
 
 pub fn assert_unique_type(
   env: Environment,
-  id: ast.TypeId,
+  typeid: ast.TypeId,
 ) -> Result(Nil, CodegenError) {
-  case list.find(env.frames, fn(f) { dict.has_key(f.types, id) }) {
-    Ok(_) -> Error(DuplicateType(id))
-    Error(_) -> Ok(Nil)
+  let assert_unique_type_name = fn(id) {
+    case list.find(env.frames, fn(f) { dict.has_key(f.types, id) }) {
+      Ok(_) -> Error(DuplicateType(id))
+      Error(_) -> Ok(Nil)
+    }
+  }
+
+  case typeid {
+    ast.TypeName(id) -> assert_unique_type_name(id)
+    ast.TypePointer(typeid) -> assert_unique_type(env, typeid)
   }
 }

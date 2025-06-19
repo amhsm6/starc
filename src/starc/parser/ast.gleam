@@ -3,8 +3,10 @@ import gleam/option.{type Option}
 pub type Identifier =
   String
 
-pub type TypeId =
-  Identifier
+pub type TypeId {
+  TypeName(Identifier)
+  TypePointer(TypeId)
+}
 
 pub type UntypedProgram =
   List(UntypedDeclaration)
@@ -88,8 +90,7 @@ pub type UntypedExpression {
 
 pub type TypedExpression {
   TypedIntExpr(value: Int, ty: Type)
-  TypedBoolExpr(value: Bool, ty: Type)
-  TypedStringExpr(value: String, ty: Type)
+  TypedBoolExpr(Bool)
   TypedVarExpr(id: Identifier, ty: Type, frame_offset: Int)
 
   TypedAddExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
@@ -111,7 +112,7 @@ pub type TypedExpression {
   TypedCallExpression(
     label: String,
     args: List(TypedExpression),
-    ty: Type,
+    return_type: Type,
     return_frame_offset: Int,
   )
 }
@@ -141,8 +142,7 @@ pub fn size_of(ty: Type) -> Int {
 pub fn type_of(expr: TypedExpression) -> Type {
   case expr {
     TypedIntExpr(ty:, ..) -> ty
-    TypedBoolExpr(ty:, ..) -> ty
-    TypedStringExpr(ty:, ..) -> ty
+    TypedBoolExpr(..) -> Bool
     TypedVarExpr(ty:, ..) -> ty
 
     TypedAddExpr(ty:, ..) -> ty
@@ -161,6 +161,6 @@ pub fn type_of(expr: TypedExpression) -> Type {
     TypedAddrOfExpr(ty:, ..) -> ty
     TypedDerefExpr(ty:, ..) -> ty
 
-    TypedCallExpression(ty:, ..) -> ty
+    TypedCallExpression(return_type:, ..) -> return_type
   }
 }

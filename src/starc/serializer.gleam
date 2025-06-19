@@ -99,20 +99,41 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
     ir.Call(x) ->
       string_tree.concat([string_tree.from_string("call "), serialize_value(x)])
 
-    ir.Div(to:, from:) ->
-      string_tree.concat([
-        string_tree.from_string("push rax\n"),
-        string_tree.from_string("mov rax, "),
-        serialize_value(to),
-        string_tree.from_string("\n"),
-        string_tree.from_string("div "),
-        serialize_value(from),
-        string_tree.from_string("\n"),
-        string_tree.from_string("mov "),
-        serialize_value(to),
-        string_tree.from_string(", rax\n"),
-        string_tree.from_string("pop rax"),
-      ])
+    ir.Div(to:, from:) -> {
+      case from {
+        ir.Immediate(..) -> {
+          string_tree.concat([
+            string_tree.from_string("push rax\n"),
+            string_tree.from_string("mov rax, "),
+            serialize_value(to),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mov rcx, "),
+            serialize_value(from),
+            string_tree.from_string("\n"),
+            string_tree.from_string("div rcx\n"),
+            string_tree.from_string("mov "),
+            serialize_value(to),
+            string_tree.from_string(", rax\n"),
+            string_tree.from_string("pop rax"),
+          ])
+        }
+        _ -> {
+          string_tree.concat([
+            string_tree.from_string("push rax\n"),
+            string_tree.from_string("mov rax, "),
+            serialize_value(to),
+            string_tree.from_string("\n"),
+            string_tree.from_string("div "),
+            serialize_value(from),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mov "),
+            serialize_value(to),
+            string_tree.from_string(", rax\n"),
+            string_tree.from_string("pop rax"),
+          ])
+        }
+      }
+    }
 
     ir.Epilogue ->
       string_tree.from_strings(["mov rsp, rbp\n", "pop rbp\n", "ret"])
@@ -131,14 +152,12 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       case to, from {
         ir.Deref(..), ir.Deref(..) -> {
           string_tree.concat([
-            string_tree.from_string("push rax\n"),
-            string_tree.from_string("mov rax, "),
+            string_tree.from_string("mov rcx, "),
             serialize_value(from),
             string_tree.from_string("\n"),
             string_tree.from_string("mov "),
             serialize_value(to),
-            string_tree.from_string(", rax\n"),
-            string_tree.from_string("pop rax"),
+            string_tree.from_string(", rcx"),
           ])
         }
         _, _ ->
@@ -151,20 +170,41 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       }
     }
 
-    ir.Mul(to:, from:) ->
-      string_tree.concat([
-        string_tree.from_string("push rax\n"),
-        string_tree.from_string("mov rax, "),
-        serialize_value(to),
-        string_tree.from_string("\n"),
-        string_tree.from_string("mul "),
-        serialize_value(from),
-        string_tree.from_string("\n"),
-        string_tree.from_string("mov "),
-        serialize_value(to),
-        string_tree.from_string(", rax\n"),
-        string_tree.from_string("pop rax"),
-      ])
+    ir.Mul(to:, from:) -> {
+      case from {
+        ir.Immediate(..) -> {
+          string_tree.concat([
+            string_tree.from_string("push rax\n"),
+            string_tree.from_string("mov rax, "),
+            serialize_value(to),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mov rcx, "),
+            serialize_value(from),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mul rcx\n"),
+            string_tree.from_string("mov "),
+            serialize_value(to),
+            string_tree.from_string(", rax\n"),
+            string_tree.from_string("pop rax"),
+          ])
+        }
+        _ -> {
+          string_tree.concat([
+            string_tree.from_string("push rax\n"),
+            string_tree.from_string("mov rax, "),
+            serialize_value(to),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mul "),
+            serialize_value(from),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mov "),
+            serialize_value(to),
+            string_tree.from_string(", rax\n"),
+            string_tree.from_string("pop rax"),
+          ])
+        }
+      }
+    }
 
     ir.Pop(x) ->
       string_tree.concat([string_tree.from_string("pop "), serialize_value(x)])
