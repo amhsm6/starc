@@ -1,8 +1,10 @@
 import clip
 import clip/arg
+import clip/opt
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import shellout
@@ -15,7 +17,7 @@ import starc/parser
 import starc/serializer
 
 type Command {
-  Command(input: String)
+  Command(input: String, output: Option(String))
 }
 
 type CompileError {
@@ -25,18 +27,23 @@ type CompileError {
   CodegenError(CodegenError)
 }
 
-fn compile(path: String) -> Result(Nil, String) {
-  let filename = case string.split(path, ".") {
-    [name] -> name
-    parts ->
-      list.take(parts, list.length(parts) - 1)
-      |> string.join(".")
-  }
-  let output = filename <> ".s"
+fn compile(cmd: Command) -> Result(Nil, String) {
+  let Command(input:, output:) = cmd
+
+  let output =
+    option.lazy_unwrap(output, fn() {
+      let filename = case string.split(input, ".") {
+        [name] -> name
+        parts ->
+          list.take(parts, list.length(parts) - 1)
+          |> string.join(".")
+      }
+      filename <> ".s"
+    })
 
   let res = {
     use input <- result.try(
-      simplifile.read(path)
+      simplifile.read(input)
       |> result.map_error(FileError),
     )
 
@@ -71,7 +78,7 @@ fn compile(path: String) -> Result(Nil, String) {
       LexerError(lexer.UnexpectedToken(at:, next:)) ->
         "Lexer error: Unexpected token "
         <> next
-        <> " at row"
+        <> " at row "
         <> int.to_string(at.line)
         <> " col "
         <> int.to_string(at.char)
@@ -83,13 +90,18 @@ fn compile(path: String) -> Result(Nil, String) {
 
 pub fn main() {
   let res = {
-    use Command(input:) <- result.try(
-      clip.command(Command)
+    use cmd <- result.try(
+      clip.command({
+        use input <- clip.parameter
+        use output <- clip.parameter
+        Command(input:, output: option.from_result(output))
+      })
       |> clip.arg(arg.new("input"))
+      |> clip.opt(opt.new("output") |> opt.short("o") |> opt.optional())
       |> clip.run(shellout.arguments()),
     )
 
-    compile(input)
+    compile(cmd)
   }
 
   case res {

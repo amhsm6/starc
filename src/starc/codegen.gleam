@@ -8,7 +8,6 @@ import starc/codegen/env.{type CodegenError}
 import starc/codegen/ir
 import starc/parser/ast
 
-// TODO: register allocation
 fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
   case expr {
     ast.TypedIntExpr(value:, ..) -> pure(ir.Immediate(value))

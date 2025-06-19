@@ -5,7 +5,7 @@
 msg: .ascii "%d\n\0"
 
     .section .text
-    .global _start
+    .global print_int64
 
 print_int64:
     mov rdi, offset msg
@@ -15,14 +15,5 @@ print_int64:
     and rsp, -16
     call printf
     mov rsp, rbx
-
-    ret
-
-_start:
-    call main
-
-    mov rax, 60
-    mov rdi, 0
-    syscall
 
     ret

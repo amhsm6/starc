@@ -68,7 +68,6 @@ pub fn pop_frame(env: Environment) -> Environment {
   Environment(..env, frames:)
 }
 
-// FIXME
 pub fn set_frame_offset(env: Environment, frame_offset: Int) -> Environment {
   Environment(..env, frame_offset:)
 }

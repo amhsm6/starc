@@ -4,15 +4,60 @@ import gleam/string_tree.{type StringTree}
 
 import starc/codegen/ir
 
+fn header() -> String {
+  "
+  .intel_syntax noprefix
+  .section .text
+  .global _start
+  _start:
+  call main
+  mov rax, 60
+  mov rdi, 0
+  syscall
+  ret
+  "
+}
+
 fn serialize_value(value: ir.Value) -> StringTree {
   case value {
     ir.Immediate(x) -> string_tree.from_string(int.to_string(x))
 
     ir.Register(ir.RAX) -> string_tree.from_string("rax")
+    ir.Register(ir.EAX) -> string_tree.from_string("eax")
+    ir.Register(ir.AX) -> string_tree.from_string("ax")
+    ir.Register(ir.AH) -> string_tree.from_string("ah")
+    ir.Register(ir.AL) -> string_tree.from_string("al")
+
     ir.Register(ir.RBX) -> string_tree.from_string("rbx")
-    ir.Register(ir.RSP) -> string_tree.from_string("rsp")
-    ir.Register(ir.RBP) -> string_tree.from_string("rbp")
+    ir.Register(ir.EBX) -> string_tree.from_string("ebx")
+    ir.Register(ir.BX) -> string_tree.from_string("bx")
+    ir.Register(ir.BH) -> string_tree.from_string("bh")
+    ir.Register(ir.BL) -> string_tree.from_string("bl")
+
+    ir.Register(ir.RCX) -> string_tree.from_string("rcx")
+    ir.Register(ir.ECX) -> string_tree.from_string("ecx")
+    ir.Register(ir.CX) -> string_tree.from_string("cx")
+    ir.Register(ir.CH) -> string_tree.from_string("ch")
+    ir.Register(ir.CL) -> string_tree.from_string("cl")
+
+    ir.Register(ir.RDX) -> string_tree.from_string("rdx")
+    ir.Register(ir.EDX) -> string_tree.from_string("edx")
+    ir.Register(ir.DX) -> string_tree.from_string("dx")
+    ir.Register(ir.DH) -> string_tree.from_string("dh")
+    ir.Register(ir.DL) -> string_tree.from_string("dl")
+
+    ir.Register(ir.RDI) -> string_tree.from_string("rdi")
+    ir.Register(ir.EDI) -> string_tree.from_string("edi")
+    ir.Register(ir.DI) -> string_tree.from_string("di")
+    ir.Register(ir.DIL) -> string_tree.from_string("dil")
+
     ir.Register(ir.RSI) -> string_tree.from_string("rsi")
+    ir.Register(ir.ESI) -> string_tree.from_string("esi")
+    ir.Register(ir.SI) -> string_tree.from_string("si")
+    ir.Register(ir.SIL) -> string_tree.from_string("sil")
+
+    ir.Register(ir.RBP) -> string_tree.from_string("rbp")
+    ir.Register(ir.RSP) -> string_tree.from_string("rsp")
 
     ir.LabelAddress(label) -> string_tree.from_string(label)
 
@@ -37,11 +82,10 @@ fn serialize_value(value: ir.Value) -> StringTree {
         string_tree.from_string("]"),
       ])
     }
-
-    _ -> todo
   }
 }
 
+// FIXME: div semantics
 fn serialize_statement(statement: ir.Statement) -> StringTree {
   case statement {
     ir.Add(to:, from:) ->
@@ -149,5 +193,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
 pub fn serialize_program(code: ir.Program) -> String {
   list.map(code, serialize_statement)
   |> string_tree.join("\n")
+  |> string_tree.prepend(header())
+  |> string_tree.append("\n")
   |> string_tree.to_string()
 }
