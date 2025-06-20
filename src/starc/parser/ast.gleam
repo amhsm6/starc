@@ -130,7 +130,7 @@ pub type Type {
 pub fn size_of(ty: Type) -> Int {
   case ty {
     Void -> 0
-    Bool -> 1
+    Bool -> 8
     Int8 -> 1
     Int16 -> 2
     Int32 -> 4

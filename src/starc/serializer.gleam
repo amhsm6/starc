@@ -227,6 +227,34 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+
+    ir.AndN(to:, from:, mask:) ->
+      string_tree.concat([
+        string_tree.from_string("andn "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+        string_tree.from_string(", "),
+        serialize_value(mask),
+      ])
+
+    ir.Cmp(x, y) ->
+      string_tree.concat([
+        string_tree.from_string("cmp "),
+        serialize_value(x),
+        string_tree.from_string(", "),
+        serialize_value(y),
+      ])
+
+    ir.ExtractZF(to) ->
+      string_tree.concat([
+        string_tree.from_string("pushf\n"),
+        string_tree.from_string("mov rcx, 0b0000000100000110\n"),
+        string_tree.from_string("bextr "),
+        serialize_value(to),
+        string_tree.from_string(", qword ptr [rsp], rcx\n"),
+        string_tree.from_string("popf"),
+      ])
   }
 }
 

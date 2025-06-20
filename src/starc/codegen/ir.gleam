@@ -19,6 +19,10 @@ pub type Statement {
   Sub(to: Value, from: Value)
   Mul(to: Value, from: Value)
   Div(to: Value, from: Value)
+
+  Cmp(Value, Value)
+  ExtractZF(Value)
+  AndN(to: Value, from: Value, mask: Value)
 }
 
 pub type Value {

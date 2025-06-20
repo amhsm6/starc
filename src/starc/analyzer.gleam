@@ -49,6 +49,7 @@ fn analyze_expression(
       }
     }
 
+    // TODO: call any function pointer, pass the address instead of the label
     ast.UntypedCallExpression(f:, args:) -> {
       case f {
         ast.UntypedVarExpr(id) -> {

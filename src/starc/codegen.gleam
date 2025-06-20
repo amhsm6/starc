@@ -122,10 +122,9 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Add(ir.Register(ir.RBX), e2),
           ir.Move(to: ir.Register(ir.RAX), from: ir.Register(ir.RBX)),
+          ir.Pop(ir.Register(ir.RBX)),
         ]),
       )
-
-      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
 
       pure(ir.Register(ir.RAX))
     }
@@ -140,10 +139,9 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Sub(ir.Register(ir.RBX), e2),
           ir.Move(to: ir.Register(ir.RAX), from: ir.Register(ir.RBX)),
+          ir.Pop(ir.Register(ir.RBX)),
         ]),
       )
-
-      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
 
       pure(ir.Register(ir.RAX))
     }
@@ -158,10 +156,9 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Mul(ir.Register(ir.RBX), e2),
           ir.Move(to: ir.Register(ir.RAX), from: ir.Register(ir.RBX)),
+          ir.Pop(ir.Register(ir.RBX)),
         ]),
       )
-
-      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
 
       pure(ir.Register(ir.RAX))
     }
@@ -176,16 +173,71 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Div(ir.Register(ir.RBX), e2),
           ir.Move(to: ir.Register(ir.RAX), from: ir.Register(ir.RBX)),
+          ir.Pop(ir.Register(ir.RBX)),
         ]),
       )
-
-      use _ <- perform(emit([ir.Pop(ir.Register(ir.RBX))]))
 
       pure(ir.Register(ir.RAX))
     }
 
-    ast.TypedEQExpr(..) -> todo
-    ast.TypedNEQExpr(..) -> todo
+    ast.TypedEQExpr(e1:, e2:, ..) -> {
+      let ty = ast.type_of(e1)
+      case ty {
+        ast.Int64 | ast.Int32 | ast.Int16 | ast.Int8 | ast.Bool -> {
+          use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+          use e1 <- perform(generate_expression(e1))
+          use _ <- perform(emit([ir.Move(to: ir.Register(ir.RBX), from: e1)]))
+
+          use e2 <- perform(generate_expression(e2))
+          use _ <- perform(
+            emit([
+              ir.Cmp(ir.Register(ir.RBX), e2),
+              ir.ExtractZF(ir.Register(ir.RAX)),
+              ir.Pop(ir.Register(ir.RBX)),
+            ]),
+          )
+
+          pure(ir.Register(ir.RAX))
+        }
+
+        ast.Pointer(_) -> todo
+
+        ast.Void -> panic
+      }
+    }
+    ast.TypedNEQExpr(e1:, e2:, ..) -> {
+      let ty = ast.type_of(e1)
+      case ty {
+        ast.Int64 | ast.Int32 | ast.Int16 | ast.Int8 | ast.Bool -> {
+          use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+
+          use e1 <- perform(generate_expression(e1))
+          use _ <- perform(emit([ir.Move(to: ir.Register(ir.RBX), from: e1)]))
+
+          use e2 <- perform(generate_expression(e2))
+          use _ <- perform(
+            emit([
+              ir.Cmp(ir.Register(ir.RBX), e2),
+              ir.ExtractZF(ir.Register(ir.RAX)),
+              ir.Move(to: ir.Register(ir.RBX), from: ir.Immediate(1)),
+              ir.AndN(
+                to: ir.Register(ir.RAX),
+                from: ir.Register(ir.RAX),
+                mask: ir.Register(ir.RBX),
+              ),
+              ir.Pop(ir.Register(ir.RBX)),
+            ]),
+          )
+
+          pure(ir.Register(ir.RAX))
+        }
+
+        ast.Pointer(_) -> todo
+
+        ast.Void -> panic
+      }
+    }
     ast.TypedGEExpr(..) -> todo
     ast.TypedGTExpr(..) -> todo
     ast.TypedLEExpr(..) -> todo
