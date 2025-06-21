@@ -1,16 +1,12 @@
-fn one(x *int64) int64 {
+fn one(x *int32) int32 {
     result := *x + 1
-    *x = *x * 2
+    *x = *x + 2
     return result
 }
 
-fn two(x, y int64) int64 {
-    return x * y
-}
-
 fn main() {
-    x := 10
+    x int32 := 10
     one(&x)
     y := one(&x)
-    print_int64(x + y)
+    print_int32(x + y)
 }

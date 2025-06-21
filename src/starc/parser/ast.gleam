@@ -69,6 +69,9 @@ pub type UntypedExpression {
   UntypedStringExpr(String)
   UntypedVarExpr(Identifier)
 
+  UntypedAddrOfExpr(UntypedExpression)
+  UntypedDerefExpr(UntypedExpression)
+
   UntypedAddExpr(UntypedExpression, UntypedExpression)
   UntypedSubExpr(UntypedExpression, UntypedExpression)
   UntypedMulExpr(UntypedExpression, UntypedExpression)
@@ -82,8 +85,6 @@ pub type UntypedExpression {
   UntypedGEExpr(UntypedExpression, UntypedExpression)
 
   UntypedNotExpr(UntypedExpression)
-  UntypedAddrOfExpr(UntypedExpression)
-  UntypedDerefExpr(UntypedExpression)
 
   UntypedCallExpression(f: UntypedExpression, args: List(UntypedExpression))
 }
@@ -93,21 +94,22 @@ pub type TypedExpression {
   TypedBoolExpr(Bool)
   TypedVarExpr(id: Identifier, ty: Type, frame_offset: Int)
 
+  TypedAddrOfExpr(e: TypedExpression, ty: Type)
+  TypedDerefExpr(e: TypedExpression, ty: Type)
+
   TypedAddExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
   TypedSubExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
   TypedMulExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
   TypedDivExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
 
-  TypedEQExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
-  TypedNEQExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
-  TypedLTExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
-  TypedLEExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
-  TypedGTExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
-  TypedGEExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedEQExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedNEQExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedLTExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedLEExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedGTExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedGEExpr(e1: TypedExpression, e2: TypedExpression)
 
-  TypedNotExpr(e: TypedExpression, ty: Type)
-  TypedAddrOfExpr(e: TypedExpression, ty: Type)
-  TypedDerefExpr(e: TypedExpression, ty: Type)
+  TypedNotExpr(e: TypedExpression)
 
   TypedCallExpression(
     label: String,
@@ -125,17 +127,19 @@ pub type Type {
   Int32
   Int64
   Pointer(Type)
+  IntConst
 }
 
 pub fn size_of(ty: Type) -> Int {
   case ty {
     Void -> 0
-    Bool -> 8
+    Bool -> 1
     Int8 -> 1
     Int16 -> 2
     Int32 -> 4
     Int64 -> 8
     Pointer(..) -> 8
+    IntConst -> panic
   }
 }
 
@@ -145,21 +149,22 @@ pub fn type_of(expr: TypedExpression) -> Type {
     TypedBoolExpr(..) -> Bool
     TypedVarExpr(ty:, ..) -> ty
 
+    TypedAddrOfExpr(ty:, ..) -> ty
+    TypedDerefExpr(ty:, ..) -> ty
+
     TypedAddExpr(ty:, ..) -> ty
     TypedSubExpr(ty:, ..) -> ty
     TypedMulExpr(ty:, ..) -> ty
     TypedDivExpr(ty:, ..) -> ty
 
-    TypedEQExpr(ty:, ..) -> ty
-    TypedNEQExpr(ty:, ..) -> ty
-    TypedLTExpr(ty:, ..) -> ty
-    TypedLEExpr(ty:, ..) -> ty
-    TypedGTExpr(ty:, ..) -> ty
-    TypedGEExpr(ty:, ..) -> ty
+    TypedEQExpr(..) -> Bool
+    TypedNEQExpr(..) -> Bool
+    TypedLTExpr(..) -> Bool
+    TypedLEExpr(..) -> Bool
+    TypedGTExpr(..) -> Bool
+    TypedGEExpr(..) -> Bool
 
-    TypedNotExpr(ty:, ..) -> ty
-    TypedAddrOfExpr(ty:, ..) -> ty
-    TypedDerefExpr(ty:, ..) -> ty
+    TypedNotExpr(..) -> Bool
 
     TypedCallExpression(return_type:, ..) -> return_type
   }

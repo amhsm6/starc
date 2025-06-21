@@ -47,6 +47,30 @@ pub fn builtin() -> Frame {
           return_type: ast.Void,
         ),
       ),
+      #(
+        "print_int32",
+        Function(
+          label: "print_int32",
+          arg_types: [ast.Int32],
+          return_type: ast.Void,
+        ),
+      ),
+      #(
+        "print_int16",
+        Function(
+          label: "print_int16",
+          arg_types: [ast.Int16],
+          return_type: ast.Void,
+        ),
+      ),
+      #(
+        "print_int8",
+        Function(
+          label: "print_int8",
+          arg_types: [ast.Int8],
+          return_type: ast.Void,
+        ),
+      ),
     ]),
     types: dict.from_list([
       #("bool", ast.Bool),

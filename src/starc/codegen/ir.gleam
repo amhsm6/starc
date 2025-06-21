@@ -27,46 +27,17 @@ pub type Statement {
 
 pub type Value {
   Immediate(Int)
-  Register(Register)
+  Register(reg: Register, size: Int)
   LabelAddress(String)
   Deref(value: Value, offset: Value, multiplier: Int, size: Int)
+  RBP
+  RSP
+  RSI
 }
 
 pub type Register {
-  RAX
-  EAX
-  AX
-  AH
-  AL
-
-  RBX
-  EBX
-  BX
-  BH
-  BL
-
-  RCX
-  ECX
-  CX
-  CH
-  CL
-
-  RDX
-  EDX
-  DX
-  DH
-  DL
-
-  RDI
-  EDI
-  DI
-  DIL
-
-  RSI
-  ESI
-  SI
-  SIL
-
-  RBP
-  RSP
+  RegA
+  RegB
+  RegC
+  RegD
 }
