@@ -80,9 +80,9 @@ print_int8:
     ret
 
 print_bool:
-    mov rax, qword ptr [rsp + 8]
+    mov al, byte ptr [rsp + 8]
 
-    test rax, rax
+    test al, al
     jz print_false
 
 print_true:

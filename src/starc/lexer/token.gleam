@@ -18,6 +18,9 @@ pub type Token {
   TokenBang
   TokenAmpersand
 
+  TokenDoubleAmpersand
+  TokenDoubleBar
+
   TokenEquals
   TokenNotEquals
   TokenLT

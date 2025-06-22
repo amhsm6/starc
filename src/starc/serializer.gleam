@@ -84,7 +84,6 @@ fn serialize_value(value: ir.Value) -> StringTree {
   }
 }
 
-// FIXME: multiplication - mul only, division - idiv only
 fn serialize_statement(statement: ir.Statement) -> StringTree {
   case statement {
     ir.Add(to:, from:) ->
@@ -106,15 +105,20 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       }
       let out_register = serialize_register(ir.Register(ir.RegA, size:))
 
-      let clear_register = serialize_register(ir.Register(ir.RegD, size:))
+      let extension = case size {
+        8 -> string_tree.from_string("cqo")
+        4 -> string_tree.from_string("cdq")
+        2 -> string_tree.from_string("cwd")
+        1 -> string_tree.from_string("movsx ax, al")
+        _ -> panic
+      }
 
       case from {
-        ir.Immediate(..) | ir.Register(reg: ir.RegA, ..) -> {
+        ir.Immediate(..)
+        | ir.Register(reg: ir.RegA, ..)
+        | ir.Deref(value: ir.Register(reg: ir.RegA, ..), ..) -> {
           let aux_register = serialize_register(ir.Register(ir.RegC, size:))
           string_tree.concat([
-            string_tree.from_string("mov "),
-            clear_register,
-            string_tree.from_string(", 0\n"),
             string_tree.from_string("mov "),
             aux_register,
             string_tree.from_string(", "),
@@ -124,6 +128,8 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
             out_register,
             string_tree.from_string(", "),
             serialize_value(to),
+            string_tree.from_string("\n"),
+            extension,
             string_tree.from_string("\n"),
             string_tree.from_string("idiv "),
             aux_register,
@@ -138,12 +144,11 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         _ ->
           string_tree.concat([
             string_tree.from_string("mov "),
-            clear_register,
-            string_tree.from_string(", 0\n"),
-            string_tree.from_string("mov "),
             out_register,
             string_tree.from_string(", "),
             serialize_value(to),
+            string_tree.from_string("\n"),
+            extension,
             string_tree.from_string("\n"),
             string_tree.from_string("idiv "),
             serialize_value(from),
@@ -204,7 +209,9 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       let out_register = serialize_register(ir.Register(ir.RegA, size:))
 
       case from {
-        ir.Immediate(..) | ir.Register(reg: ir.RegA, ..) -> {
+        ir.Immediate(..)
+        | ir.Register(reg: ir.RegA, ..)
+        | ir.Deref(value: ir.Register(reg: ir.RegA, ..), ..) -> {
           let aux_register = serialize_register(ir.Register(ir.RegC, size:))
           string_tree.concat([
             string_tree.from_string("mov "),
@@ -217,7 +224,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
             string_tree.from_string(", "),
             serialize_value(to),
             string_tree.from_string("\n"),
-            string_tree.from_string("mul "),
+            string_tree.from_string("imul "),
             aux_register,
             string_tree.from_string("\n"),
             string_tree.from_string("mov "),
@@ -234,7 +241,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
             string_tree.from_string(", "),
             serialize_value(to),
             string_tree.from_string("\n"),
-            string_tree.from_string("mul "),
+            string_tree.from_string("imul "),
             serialize_value(from),
             string_tree.from_string("\n"),
             string_tree.from_string("mov "),
@@ -317,16 +324,6 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         serialize_value(from),
       ])
 
-    ir.AndN(to:, from:, mask:) ->
-      string_tree.concat([
-        string_tree.from_string("andn "),
-        serialize_value(to),
-        string_tree.from_string(", "),
-        serialize_value(from),
-        string_tree.from_string(", "),
-        serialize_value(mask),
-      ])
-
     ir.Cmp(x, y) ->
       string_tree.concat([
         string_tree.from_string("cmp "),
@@ -335,15 +332,65 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         serialize_value(y),
       ])
 
-    ir.ExtractZF(to) ->
+    ir.ExtractZF(to) -> {
+      let size = case to {
+        ir.Deref(size:, ..) -> size
+        ir.Register(size:, ..) -> size
+        _ -> panic
+      }
+
+      let out_register = ir.Register(reg: ir.RegA, size:)
+      let aux_register = ir.Register(reg: ir.RegC, size:)
+
       string_tree.concat([
         string_tree.from_string("pushf\n"),
         string_tree.from_string("mov rcx, 0b0000000100000110\n"),
-        string_tree.from_string("bextr "),
-        serialize_value(to),
-        string_tree.from_string(", qword ptr [rsp], rcx\n"),
+        string_tree.from_string("bextr rcx, qword ptr [rsp], rcx\n"),
+        string_tree.from_string("mov "),
+        serialize_register(out_register),
+        string_tree.from_string(", "),
+        serialize_register(aux_register),
+        string_tree.from_string("\n"),
         string_tree.from_string("popf"),
       ])
+    }
+
+    ir.And(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("and "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+      ])
+
+    ir.Or(to:, from:) ->
+      string_tree.concat([
+        string_tree.from_string("or "),
+        serialize_value(to),
+        string_tree.from_string(", "),
+        serialize_value(from),
+      ])
+
+    ir.Not(x) ->
+      string_tree.concat([string_tree.from_string("not "), serialize_value(x)])
+
+    ir.Neg(x) ->
+      string_tree.concat([string_tree.from_string("neg "), serialize_value(x)])
+
+    ir.JGE(x) ->
+      string_tree.concat([string_tree.from_string("jge "), serialize_value(x)])
+
+    ir.JGT(x) ->
+      string_tree.concat([string_tree.from_string("jg "), serialize_value(x)])
+
+    ir.JLE(x) ->
+      string_tree.concat([string_tree.from_string("jle "), serialize_value(x)])
+
+    ir.JLT(x) ->
+      string_tree.concat([string_tree.from_string("jl "), serialize_value(x)])
+
+    ir.Jump(x) ->
+      string_tree.concat([string_tree.from_string("jmp "), serialize_value(x)])
   }
 }
 

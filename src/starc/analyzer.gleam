@@ -86,6 +86,7 @@ fn analyze_expression(
       use sym <- perform(resolve_symbol(id))
       case sym {
         Function(..) -> die(TypeError("Functions cannot be values"))
+
         Variable(frame_offset:, ty:) ->
           pure(ast.TypedVarExpr(id:, ty:, frame_offset:))
       }
@@ -97,6 +98,7 @@ fn analyze_expression(
       case e {
         ast.TypedVarExpr(ty:, ..) ->
           pure(ast.TypedAddrOfExpr(e:, ty: ast.Pointer(ty)))
+
         _ -> die(TypeError("Can only take address of a variable"))
       }
     }
@@ -105,6 +107,7 @@ fn analyze_expression(
       use e <- perform(analyze_expression(e))
       case ast.type_of(e) {
         ast.Pointer(ty) -> pure(ast.TypedDerefExpr(e:, ty:))
+
         _ -> die(TypeError("Can only deref a pointer"))
       }
     }
@@ -125,6 +128,7 @@ fn analyze_expression(
                     use ty <- perform(unify(ast.type_of(arg), arg_ty))
                     typify_constants(arg, ty)
                   })
+
                 Error(_) -> die(TypeError("Argument count mismatch"))
               })
 
@@ -138,9 +142,11 @@ fn analyze_expression(
                 return_frame_offset: frame_offset,
               ))
             }
+
             _ -> die(TypeError("Can only call a function"))
           }
         }
+
         _ ->
           die(TypeError("Can only call a function by its identifier FIXME??"))
       }
@@ -186,11 +192,34 @@ fn analyze_expression(
       pure(ast.TypedDivExpr(e1:, e2:, ty:))
     }
 
+    ast.UntypedNegExpr(expr) -> {
+      use expr <- perform(analyze_expression(expr))
+      case expr {
+        ast.TypedIntExpr(value:, ..) ->
+          pure(ast.TypedIntExpr(value: -value, ty: ast.IntConst))
+
+        _ -> {
+          let ty = ast.type_of(expr)
+          case ty {
+            ast.Int8 | ast.Int16 | ast.Int32 | ast.Int64 ->
+              pure(ast.TypedNegExpr(e: expr, ty:))
+
+            _ -> die(TypeError("Cannot negate " <> string.inspect(ty)))
+          }
+        }
+      }
+    }
+
     ast.UntypedEQExpr(e1, e2) -> {
       use e1 <- perform(analyze_expression(e1))
       use e2 <- perform(analyze_expression(e2))
 
       use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedEQExpr(e1:, e2:))
@@ -201,6 +230,11 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
 
       use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedNEQExpr(e1:, e2:))
@@ -211,6 +245,11 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
 
       use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedLTExpr(e1:, e2:))
@@ -221,6 +260,11 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
 
       use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedLEExpr(e1:, e2:))
@@ -231,6 +275,11 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
 
       use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedGTExpr(e1:, e2:))
@@ -241,15 +290,46 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
 
       use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedGEExpr(e1:, e2:))
     }
 
+    ast.UntypedAndExpr(e1, e2) -> {
+      use e1 <- perform(analyze_expression(e1))
+      use e2 <- perform(analyze_expression(e2))
+
+      use _ <- perform(unify(ast.type_of(e1), ast.Bool))
+      use _ <- perform(unify(ast.type_of(e2), ast.Bool))
+
+      pure(ast.TypedAndExpr(e1:, e2:))
+    }
+
+    ast.UntypedOrExpr(e1, e2) -> {
+      use e1 <- perform(analyze_expression(e1))
+      use e2 <- perform(analyze_expression(e2))
+
+      use _ <- perform(unify(ast.type_of(e1), ast.Bool))
+      use _ <- perform(unify(ast.type_of(e2), ast.Bool))
+
+      pure(ast.TypedOrExpr(e1:, e2:))
+    }
+
     ast.UntypedNotExpr(e) -> {
       use e <- perform(analyze_expression(e))
-      use _ <- perform(unify(ast.type_of(e), ast.Bool))
-      pure(ast.TypedNotExpr(e))
+      case e {
+        ast.TypedBoolExpr(x) -> pure(ast.TypedBoolExpr(!x))
+
+        _ -> {
+          use _ <- perform(unify(ast.type_of(e), ast.Bool))
+          pure(ast.TypedNotExpr(e))
+        }
+      }
     }
   }
 }

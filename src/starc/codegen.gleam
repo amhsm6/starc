@@ -138,6 +138,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
 
       pure(out_register)
     }
+
     ast.TypedSubExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
       let out_register = ir.Register(reg: ir.RegA, size:)
@@ -160,6 +161,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
 
       pure(out_register)
     }
+
     ast.TypedMulExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
       let out_register = ir.Register(reg: ir.RegA, size:)
@@ -182,6 +184,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
 
       pure(out_register)
     }
+
     ast.TypedDivExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
       let out_register = ir.Register(reg: ir.RegA, size:)
@@ -205,71 +208,231 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
       pure(out_register)
     }
 
+    ast.TypedNegExpr(e:, ..) -> {
+      use e <- perform(generate_expression(e))
+      use _ <- perform(emit([ir.Neg(e)]))
+      pure(e)
+    }
+
     ast.TypedEQExpr(e1:, e2:) -> {
-      // let ty = ast.type_of(e1)
-      // case ty {
-      //   ast.Int64 | ast.Int32 | ast.Int16 | ast.Int8 | ast.Bool -> {
-      //     use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
 
-      //     use e1 <- perform(generate_expression(e1))
-      //     use _ <- perform(emit([ir.Move(to: ir.Register(ir.RBX), from: e1)]))
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
 
-      //     use e2 <- perform(generate_expression(e2))
-      //     use _ <- perform(
-      //       emit([
-      //         ir.Cmp(ir.Register(ir.RBX), e2),
-      //         ir.ExtractZF(ir.Register(ir.RAX)),
-      //         ir.Pop(ir.Register(ir.RBX)),
-      //       ]),
-      //     )
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
 
-      //     pure(ir.Register(ir.RAX))
-      //   }
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
 
-      //   ast.Pointer(_) -> todo
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Cmp(aux_register, e2),
+          ir.ExtractZF(out_register),
+          ir.Pop(aux_register_save),
+        ]),
+      )
 
-      //   ast.Void -> panic
-      // }
-      todo
+      pure(out_register)
     }
+
     ast.TypedNEQExpr(e1:, e2:) -> {
-      todo
-      // let ty = ast.type_of(e1)
-      // case ty {
-      //   ast.Int64 | ast.Int32 | ast.Int16 | ast.Int8 | ast.Bool -> {
-      //     use _ <- perform(emit([ir.Push(ir.Register(ir.RBX))]))
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
 
-      //     use e1 <- perform(generate_expression(e1))
-      //     use _ <- perform(emit([ir.Move(to: ir.Register(ir.RBX), from: e1)]))
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
 
-      //     use e2 <- perform(generate_expression(e2))
-      //     use _ <- perform(
-      //       emit([
-      //         ir.Cmp(ir.Register(ir.RBX), e2),
-      //         ir.ExtractZF(ir.Register(ir.RAX)),
-      //         ir.Move(to: ir.Register(ir.RBX), from: ir.Immediate(1)),
-      //         ir.AndN(
-      //           to: ir.Register(ir.RAX),
-      //           from: ir.Register(ir.RAX),
-      //           mask: ir.Register(ir.RBX),
-      //         ),
-      //         ir.Pop(ir.Register(ir.RBX)),
-      //       ]),
-      //     )
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
 
-      //     pure(ir.Register(ir.RAX))
-      //   }
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
 
-      //   ast.Pointer(_) -> todo
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Cmp(aux_register, e2),
+          ir.ExtractZF(out_register),
+          ir.Not(out_register),
+          ir.And(to: out_register, from: ir.Immediate(1)),
+          ir.Pop(aux_register_save),
+        ]),
+      )
 
-      //   ast.Void -> panic
-      // }
+      pure(out_register)
     }
-    ast.TypedGEExpr(..) -> todo
-    ast.TypedGTExpr(..) -> todo
-    ast.TypedLEExpr(..) -> todo
-    ast.TypedLTExpr(..) -> todo
-    ast.TypedNotExpr(..) -> todo
+
+    ast.TypedGTExpr(e1:, e2:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
+
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Cmp(aux_register, e2),
+          ir.JGT(ir.LabelAddress("1f")),
+          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Jump(ir.LabelAddress("2f")),
+          ir.Label("1"),
+          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Label("2"),
+          ir.Pop(aux_register_save),
+        ]),
+      )
+
+      pure(out_register)
+    }
+
+    ast.TypedGEExpr(e1:, e2:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
+
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Cmp(aux_register, e2),
+          ir.JGE(ir.LabelAddress("1f")),
+          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Jump(ir.LabelAddress("2f")),
+          ir.Label("1"),
+          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Label("2"),
+          ir.Pop(aux_register_save),
+        ]),
+      )
+
+      pure(out_register)
+    }
+
+    ast.TypedLTExpr(e1:, e2:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
+
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Cmp(aux_register, e2),
+          ir.JLT(ir.LabelAddress("1f")),
+          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Jump(ir.LabelAddress("2f")),
+          ir.Label("1"),
+          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Label("2"),
+          ir.Pop(aux_register_save),
+        ]),
+      )
+
+      pure(out_register)
+    }
+
+    ast.TypedLEExpr(e1:, e2:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
+
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Cmp(aux_register, e2),
+          ir.JLE(ir.LabelAddress("1f")),
+          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Jump(ir.LabelAddress("2f")),
+          ir.Label("1"),
+          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Label("2"),
+          ir.Pop(aux_register_save),
+        ]),
+      )
+
+      pure(out_register)
+    }
+
+    ast.TypedAndExpr(e1:, e2:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
+
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.And(to: aux_register, from: e2),
+          ir.Move(to: out_register, from: aux_register),
+          ir.Pop(aux_register_save),
+        ]),
+      )
+
+      pure(out_register)
+    }
+
+    ast.TypedOrExpr(e1:, e2:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 1)
+
+      let size = ast.type_of(e1) |> ast.size_of()
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
+
+      use e1 <- perform(generate_expression(e1))
+      use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
+
+      use e2 <- perform(generate_expression(e2))
+      use _ <- perform(
+        emit([
+          ir.Or(to: aux_register, from: e2),
+          ir.Move(to: out_register, from: aux_register),
+          ir.Pop(aux_register_save),
+        ]),
+      )
+
+      pure(out_register)
+    }
+
+    ast.TypedNotExpr(e) -> {
+      use e <- perform(generate_expression(e))
+      use _ <- perform(emit([ir.Not(e), ir.And(to: e, from: ir.Immediate(1))]))
+      pure(e)
+    }
   }
 }
 

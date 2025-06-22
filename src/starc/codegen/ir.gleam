@@ -15,14 +15,24 @@ pub type Statement {
 
   Call(Value)
 
+  Jump(Value)
+  JGT(Value)
+  JGE(Value)
+  JLT(Value)
+  JLE(Value)
+
   Add(to: Value, from: Value)
   Sub(to: Value, from: Value)
   Mul(to: Value, from: Value)
   Div(to: Value, from: Value)
+  Neg(Value)
 
   Cmp(Value, Value)
   ExtractZF(Value)
-  AndN(to: Value, from: Value, mask: Value)
+
+  And(to: Value, from: Value)
+  Or(to: Value, from: Value)
+  Not(Value)
 }
 
 pub type Value {

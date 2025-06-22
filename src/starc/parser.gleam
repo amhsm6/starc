@@ -42,6 +42,68 @@ fn parse_typeid() -> Parser(ast.TypeId, r) {
 // ================= EXPRESSION =================
 
 fn parse_expression() -> Parser(ast.UntypedExpression, r) {
+  parse_logical_or_expression()
+}
+
+fn parse_logical_or_expression() -> Parser(ast.UntypedExpression, r) {
+  use expr <- perform(parse_logical_and_expression())
+
+  use next <- perform(
+    many({
+      use t <- perform(
+        eat(fn(t) {
+          case t {
+            token.TokenDoubleBar -> True
+            _ -> False
+          }
+        }),
+      )
+      use e <- perform(parse_logical_and_expression())
+      pure(#(t, e))
+    }),
+  )
+
+  pure(
+    list.fold(next, expr, fn(e1, x) {
+      let #(token, e2) = x
+      case token {
+        token.TokenDoubleBar -> ast.UntypedOrExpr(e1, e2)
+        _ -> panic
+      }
+    }),
+  )
+}
+
+fn parse_logical_and_expression() -> Parser(ast.UntypedExpression, r) {
+  use expr <- perform(parse_comparable_expression())
+
+  use next <- perform(
+    many({
+      use t <- perform(
+        eat(fn(t) {
+          case t {
+            token.TokenDoubleAmpersand -> True
+            _ -> False
+          }
+        }),
+      )
+      use e <- perform(parse_comparable_expression())
+      pure(#(t, e))
+    }),
+  )
+
+  pure(
+    list.fold(next, expr, fn(e1, x) {
+      let #(token, e2) = x
+      case token {
+        token.TokenDoubleAmpersand -> ast.UntypedAndExpr(e1, e2)
+        _ -> panic
+      }
+    }),
+  )
+}
+
+fn parse_comparable_expression() -> Parser(ast.UntypedExpression, r) {
   use expr <- perform(parse_additive_expression())
 
   use next <- perform(
@@ -146,9 +208,10 @@ fn parse_primary_expression() -> Parser(ast.UntypedExpression, r) {
   oneof([
     parse_call_expression(),
     parse_nested_expression(),
-    parse_not_expression(),
     parse_addrof_expression(),
     parse_deref_expression(),
+    parse_neg_expression(),
+    parse_not_expression(),
     parse_var_expression(),
     parse_int(),
     parse_bool(),
@@ -198,6 +261,12 @@ fn parse_deref_expression() -> Parser(ast.UntypedExpression, r) {
   use _ <- perform(eat_exact(token.TokenStar))
   use expr <- perform(parse_primary_expression())
   pure(ast.UntypedDerefExpr(expr))
+}
+
+fn parse_neg_expression() -> Parser(ast.UntypedExpression, r) {
+  use _ <- perform(eat_exact(token.TokenMinus))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.UntypedNegExpr(expr))
 }
 
 fn parse_var_expression() -> Parser(ast.UntypedExpression, r) {

@@ -76,6 +76,7 @@ pub type UntypedExpression {
   UntypedSubExpr(UntypedExpression, UntypedExpression)
   UntypedMulExpr(UntypedExpression, UntypedExpression)
   UntypedDivExpr(UntypedExpression, UntypedExpression)
+  UntypedNegExpr(UntypedExpression)
 
   UntypedEQExpr(UntypedExpression, UntypedExpression)
   UntypedNEQExpr(UntypedExpression, UntypedExpression)
@@ -84,6 +85,8 @@ pub type UntypedExpression {
   UntypedGTExpr(UntypedExpression, UntypedExpression)
   UntypedGEExpr(UntypedExpression, UntypedExpression)
 
+  UntypedAndExpr(UntypedExpression, UntypedExpression)
+  UntypedOrExpr(UntypedExpression, UntypedExpression)
   UntypedNotExpr(UntypedExpression)
 
   UntypedCallExpression(f: UntypedExpression, args: List(UntypedExpression))
@@ -101,6 +104,7 @@ pub type TypedExpression {
   TypedSubExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
   TypedMulExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
   TypedDivExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
+  TypedNegExpr(e: TypedExpression, ty: Type)
 
   TypedEQExpr(e1: TypedExpression, e2: TypedExpression)
   TypedNEQExpr(e1: TypedExpression, e2: TypedExpression)
@@ -109,7 +113,9 @@ pub type TypedExpression {
   TypedGTExpr(e1: TypedExpression, e2: TypedExpression)
   TypedGEExpr(e1: TypedExpression, e2: TypedExpression)
 
-  TypedNotExpr(e: TypedExpression)
+  TypedAndExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedOrExpr(e1: TypedExpression, e2: TypedExpression)
+  TypedNotExpr(TypedExpression)
 
   TypedCallExpression(
     label: String,
@@ -156,6 +162,7 @@ pub fn type_of(expr: TypedExpression) -> Type {
     TypedSubExpr(ty:, ..) -> ty
     TypedMulExpr(ty:, ..) -> ty
     TypedDivExpr(ty:, ..) -> ty
+    TypedNegExpr(ty:, ..) -> ty
 
     TypedEQExpr(..) -> Bool
     TypedNEQExpr(..) -> Bool
@@ -164,6 +171,8 @@ pub fn type_of(expr: TypedExpression) -> Type {
     TypedGTExpr(..) -> Bool
     TypedGEExpr(..) -> Bool
 
+    TypedAndExpr(..) -> Bool
+    TypedOrExpr(..) -> Bool
     TypedNotExpr(..) -> Bool
 
     TypedCallExpression(return_type:, ..) -> return_type
