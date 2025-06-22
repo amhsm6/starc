@@ -18,10 +18,8 @@ fn header() -> String {
   "
 }
 
-fn serialize_value(value: ir.Value) -> StringTree {
-  case value {
-    ir.Immediate(x) -> string_tree.from_string(int.to_string(x))
-
+fn serialize_register(reg: ir.Value) -> StringTree {
+  case reg {
     ir.Register(ir.RegA, size: 8) -> string_tree.from_string("rax")
     ir.Register(ir.RegA, size: 4) -> string_tree.from_string("eax")
     ir.Register(ir.RegA, size: 2) -> string_tree.from_string("ax")
@@ -46,7 +44,17 @@ fn serialize_value(value: ir.Value) -> StringTree {
     ir.Register(ir.RegD, size: 1) -> string_tree.from_string("dl")
     ir.Register(ir.RegD, size: _) -> panic
 
+    _ -> panic
+  }
+}
+
+fn serialize_value(value: ir.Value) -> StringTree {
+  case value {
+    ir.Immediate(x) -> string_tree.from_string(int.to_string(x))
+
     ir.LabelAddress(label) -> string_tree.from_string(label)
+
+    ir.Register(..) -> serialize_register(value)
 
     ir.Deref(value:, offset:, multiplier:, size:) -> {
       let ptr = case size {
@@ -76,7 +84,7 @@ fn serialize_value(value: ir.Value) -> StringTree {
   }
 }
 
-// FIXME: div semantics
+// FIXME: multiplication - mul only, division - idiv only
 fn serialize_statement(statement: ir.Statement) -> StringTree {
   case statement {
     ir.Add(to:, from:) ->
@@ -91,38 +99,60 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       string_tree.concat([string_tree.from_string("call "), serialize_value(x)])
 
     ir.Div(to:, from:) -> {
+      let size = case to {
+        ir.Deref(size:, ..) -> size
+        ir.Register(size:, ..) -> size
+        _ -> panic
+      }
+      let out_register = serialize_register(ir.Register(ir.RegA, size:))
+
+      let clear_register = serialize_register(ir.Register(ir.RegD, size:))
+
       case from {
-        ir.Immediate(..) -> {
+        ir.Immediate(..) | ir.Register(reg: ir.RegA, ..) -> {
+          let aux_register = serialize_register(ir.Register(ir.RegC, size:))
           string_tree.concat([
-            string_tree.from_string("push rax\n"),
-            string_tree.from_string("mov rax, "),
-            serialize_value(to),
-            string_tree.from_string("\n"),
-            string_tree.from_string("mov rcx, "),
-            serialize_value(from),
-            string_tree.from_string("\n"),
-            string_tree.from_string("div rcx\n"),
             string_tree.from_string("mov "),
-            serialize_value(to),
-            string_tree.from_string(", rax\n"),
-            string_tree.from_string("pop rax"),
-          ])
-        }
-        _ -> {
-          string_tree.concat([
-            string_tree.from_string("push rax\n"),
-            string_tree.from_string("mov rax, "),
-            serialize_value(to),
-            string_tree.from_string("\n"),
-            string_tree.from_string("div "),
+            clear_register,
+            string_tree.from_string(", 0\n"),
+            string_tree.from_string("mov "),
+            aux_register,
+            string_tree.from_string(", "),
             serialize_value(from),
             string_tree.from_string("\n"),
             string_tree.from_string("mov "),
+            out_register,
+            string_tree.from_string(", "),
             serialize_value(to),
-            string_tree.from_string(", rax\n"),
-            string_tree.from_string("pop rax"),
+            string_tree.from_string("\n"),
+            string_tree.from_string("idiv "),
+            aux_register,
+            string_tree.from_string("\n"),
+            string_tree.from_string("mov "),
+            serialize_value(to),
+            string_tree.from_string(", "),
+            out_register,
           ])
         }
+
+        _ ->
+          string_tree.concat([
+            string_tree.from_string("mov "),
+            clear_register,
+            string_tree.from_string(", 0\n"),
+            string_tree.from_string("mov "),
+            out_register,
+            string_tree.from_string(", "),
+            serialize_value(to),
+            string_tree.from_string("\n"),
+            string_tree.from_string("idiv "),
+            serialize_value(from),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mov "),
+            serialize_value(to),
+            string_tree.from_string(", "),
+            out_register,
+          ])
       }
     }
 
@@ -141,14 +171,18 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
 
     ir.Move(to:, from:) -> {
       case to, from {
-        ir.Deref(..), ir.Deref(..) -> {
+        ir.Deref(size:, ..), ir.Deref(..) -> {
+          let aux_register = ir.Register(ir.RegC, size:)
           string_tree.concat([
-            string_tree.from_string("mov rcx, "),
+            string_tree.from_string("mov "),
+            serialize_register(aux_register),
+            string_tree.from_string(", "),
             serialize_value(from),
             string_tree.from_string("\n"),
             string_tree.from_string("mov "),
             serialize_value(to),
-            string_tree.from_string(", rcx"),
+            string_tree.from_string(", "),
+            serialize_register(aux_register),
           ])
         }
         _, _ ->
@@ -162,27 +196,42 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
     }
 
     ir.Mul(to:, from:) -> {
+      let size = case to {
+        ir.Deref(size:, ..) -> size
+        ir.Register(size:, ..) -> size
+        _ -> panic
+      }
+      let out_register = serialize_register(ir.Register(ir.RegA, size:))
+
       case from {
-        ir.Immediate(..) -> {
+        ir.Immediate(..) | ir.Register(reg: ir.RegA, ..) -> {
+          let aux_register = serialize_register(ir.Register(ir.RegC, size:))
           string_tree.concat([
-            string_tree.from_string("push rax\n"),
-            string_tree.from_string("mov rax, "),
-            serialize_value(to),
-            string_tree.from_string("\n"),
-            string_tree.from_string("mov rcx, "),
+            string_tree.from_string("mov "),
+            aux_register,
+            string_tree.from_string(", "),
             serialize_value(from),
             string_tree.from_string("\n"),
-            string_tree.from_string("mul rcx\n"),
+            string_tree.from_string("mov "),
+            out_register,
+            string_tree.from_string(", "),
+            serialize_value(to),
+            string_tree.from_string("\n"),
+            string_tree.from_string("mul "),
+            aux_register,
+            string_tree.from_string("\n"),
             string_tree.from_string("mov "),
             serialize_value(to),
-            string_tree.from_string(", rax\n"),
-            string_tree.from_string("pop rax"),
+            string_tree.from_string(", "),
+            out_register,
           ])
         }
-        _ -> {
+
+        _ ->
           string_tree.concat([
-            string_tree.from_string("push rax\n"),
-            string_tree.from_string("mov rax, "),
+            string_tree.from_string("mov "),
+            out_register,
+            string_tree.from_string(", "),
             serialize_value(to),
             string_tree.from_string("\n"),
             string_tree.from_string("mul "),
@@ -190,15 +239,39 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
             string_tree.from_string("\n"),
             string_tree.from_string("mov "),
             serialize_value(to),
-            string_tree.from_string(", rax\n"),
-            string_tree.from_string("pop rax"),
+            string_tree.from_string(", "),
+            out_register,
           ])
-        }
       }
     }
 
-    ir.Pop(x) ->
-      string_tree.concat([string_tree.from_string("pop "), serialize_value(x)])
+    ir.Pop(x) -> {
+      case x {
+        ir.Register(size: 1 as size, ..)
+        | ir.Register(size: 4 as size, ..)
+        | ir.Deref(size: 1 as size, ..)
+        | ir.Deref(size: 4 as size, ..) ->
+          string_tree.concat([
+            serialize_statement(ir.Move(
+              to: x,
+              from: ir.Deref(
+                value: ir.RSP,
+                offset: ir.Immediate(0),
+                multiplier: 1,
+                size:,
+              ),
+            )),
+            string_tree.from_string("\n"),
+            serialize_statement(ir.Add(to: ir.RSP, from: ir.Immediate(size))),
+          ])
+
+        _ ->
+          string_tree.concat([
+            string_tree.from_string("pop "),
+            serialize_value(x),
+          ])
+      }
+    }
 
     ir.Prologue(reserve_bytes:) ->
       string_tree.from_strings([
@@ -208,8 +281,33 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         int.to_string(reserve_bytes),
       ])
 
-    ir.Push(x) ->
-      string_tree.concat([string_tree.from_string("push "), serialize_value(x)])
+    ir.Push(x) -> {
+      case x {
+        ir.Register(size: 1 as size, ..)
+        | ir.Register(size: 4 as size, ..)
+        | ir.Deref(size: 1 as size, ..)
+        | ir.Deref(size: 4 as size, ..) ->
+          string_tree.concat([
+            serialize_statement(ir.Sub(to: ir.RSP, from: ir.Immediate(size))),
+            string_tree.from_string("\n"),
+            serialize_statement(ir.Move(
+              to: ir.Deref(
+                value: ir.RSP,
+                offset: ir.Immediate(0),
+                multiplier: 1,
+                size:,
+              ),
+              from: x,
+            )),
+          ])
+
+        _ ->
+          string_tree.concat([
+            string_tree.from_string("push "),
+            serialize_value(x),
+          ])
+      }
+    }
 
     ir.Sub(to:, from:) ->
       string_tree.concat([

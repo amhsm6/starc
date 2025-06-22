@@ -27,11 +27,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
       case e {
         ast.TypedVarExpr(ty:, frame_offset:, ..) -> {
           let size = ast.size_of(ty)
-
           use _ <- perform(
             emit([
               ir.Lea(
-                to: ir.Register(reg: ir.RegA, size:),
+                to: ir.Register(reg: ir.RegA, size: 8),
                 from: ir.Deref(
                   value: ir.RBP,
                   offset: ir.Immediate(frame_offset),
@@ -41,7 +40,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
               ),
             ]),
           )
-          pure(ir.Register(reg: ir.RegA, size:))
+          pure(ir.Register(reg: ir.RegA, size: 8))
         }
         _ -> panic
       }
@@ -119,10 +118,11 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
 
     ast.TypedAddExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
-      let aux_register = ir.Register(reg: ir.RegB, size:)
       let out_register = ir.Register(reg: ir.RegA, size:)
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
 
-      use _ <- perform(emit([ir.Push(aux_register)]))
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
 
       use e1 <- perform(generate_expression(e1))
       use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
@@ -132,7 +132,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Add(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register),
+          ir.Pop(aux_register_save),
         ]),
       )
 
@@ -140,10 +140,11 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     }
     ast.TypedSubExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
-      let aux_register = ir.Register(reg: ir.RegB, size:)
       let out_register = ir.Register(reg: ir.RegA, size:)
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
 
-      use _ <- perform(emit([ir.Push(aux_register)]))
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
 
       use e1 <- perform(generate_expression(e1))
       use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
@@ -153,7 +154,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Sub(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register),
+          ir.Pop(aux_register_save),
         ]),
       )
 
@@ -161,10 +162,11 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     }
     ast.TypedMulExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
-      let aux_register = ir.Register(reg: ir.RegB, size:)
       let out_register = ir.Register(reg: ir.RegA, size:)
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
 
-      use _ <- perform(emit([ir.Push(aux_register)]))
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
 
       use e1 <- perform(generate_expression(e1))
       use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
@@ -174,7 +176,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Mul(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register),
+          ir.Pop(aux_register_save),
         ]),
       )
 
@@ -182,10 +184,11 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     }
     ast.TypedDivExpr(e1:, e2:, ty:) -> {
       let size = ast.size_of(ty)
-      let aux_register = ir.Register(reg: ir.RegB, size:)
       let out_register = ir.Register(reg: ir.RegA, size:)
+      let aux_register = ir.Register(reg: ir.RegB, size:)
+      let aux_register_save = ir.Register(..aux_register, size: 8)
 
-      use _ <- perform(emit([ir.Push(aux_register)]))
+      use _ <- perform(emit([ir.Push(aux_register_save)]))
 
       use e1 <- perform(generate_expression(e1))
       use _ <- perform(emit([ir.Move(to: aux_register, from: e1)]))
@@ -195,7 +198,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Div(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register),
+          ir.Pop(aux_register_save),
         ]),
       )
 

@@ -3,6 +3,10 @@
     .global _start
 
 _start:
+    mov eax, 15
+    mov ebx, -1
+    idiv ebx
+
     mov rax, 4
     mov rbx, 4
     cmp rax, rbx
