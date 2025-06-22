@@ -11,9 +11,7 @@ fn header() -> String {
   .global _start
   _start:
   call main
-  mov rax, 60
-  mov rdi, 0
-  syscall
+  call exit
   ret
   "
 }
@@ -50,7 +48,7 @@ fn serialize_register(reg: ir.Value) -> StringTree {
 
 fn serialize_value(value: ir.Value) -> StringTree {
   case value {
-    ir.Immediate(x) -> string_tree.from_string(int.to_string(x))
+    ir.Immediate(value:, ..) -> string_tree.from_string(int.to_string(value))
 
     ir.LabelAddress(label) -> string_tree.from_string(label)
 
@@ -65,6 +63,9 @@ fn serialize_value(value: ir.Value) -> StringTree {
         8 -> string_tree.from_string("qword ptr")
         _ -> panic
       }
+
+      assert ir.size_of(value) == 8
+      assert ir.size_of(offset) == 8
 
       string_tree.concat([
         ptr,
@@ -86,23 +87,25 @@ fn serialize_value(value: ir.Value) -> StringTree {
 
 fn serialize_statement(statement: ir.Statement) -> StringTree {
   case statement {
-    ir.Add(to:, from:) ->
+    ir.Add(to:, from:) -> {
+      assert ir.size_of(to) == ir.size_of(from)
       string_tree.concat([
         string_tree.from_string("add "),
         serialize_value(to),
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+    }
 
-    ir.Call(x) ->
+    ir.Call(x) -> {
+      assert ir.size_of(x) == 8
       string_tree.concat([string_tree.from_string("call "), serialize_value(x)])
+    }
 
     ir.Div(to:, from:) -> {
-      let size = case to {
-        ir.Deref(size:, ..) -> size
-        ir.Register(size:, ..) -> size
-        _ -> panic
-      }
+      assert ir.size_of(to) == ir.size_of(from)
+      let size = ir.size_of(to)
+
       let out_register = serialize_register(ir.Register(ir.RegA, size:))
 
       let extension = case size {
@@ -166,17 +169,22 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
 
     ir.Label(x) -> string_tree.from_string(x <> ":")
 
-    ir.Lea(to:, from:) ->
+    ir.Lea(to:, from:) -> {
+      assert ir.size_of(to) == 8
       string_tree.concat([
         string_tree.from_string("lea "),
         serialize_value(to),
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+    }
 
     ir.Move(to:, from:) -> {
+      assert ir.size_of(to) == ir.size_of(from)
+      let size = ir.size_of(to)
+
       case to, from {
-        ir.Deref(size:, ..), ir.Deref(..) -> {
+        ir.Deref(..), ir.Deref(..) -> {
           let aux_register = ir.Register(ir.RegC, size:)
           string_tree.concat([
             string_tree.from_string("mov "),
@@ -201,11 +209,9 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
     }
 
     ir.Mul(to:, from:) -> {
-      let size = case to {
-        ir.Deref(size:, ..) -> size
-        ir.Register(size:, ..) -> size
-        _ -> panic
-      }
+      assert ir.size_of(to) == ir.size_of(from)
+      let size = ir.size_of(to)
+
       let out_register = serialize_register(ir.Register(ir.RegA, size:))
 
       case from {
@@ -253,30 +259,24 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
     }
 
     ir.Pop(x) -> {
-      case x {
-        ir.Register(size: 1 as size, ..)
-        | ir.Register(size: 4 as size, ..)
-        | ir.Deref(size: 1 as size, ..)
-        | ir.Deref(size: 4 as size, ..) ->
-          string_tree.concat([
-            serialize_statement(ir.Move(
-              to: x,
-              from: ir.Deref(
-                value: ir.RSP,
-                offset: ir.Immediate(0),
-                multiplier: 1,
-                size:,
-              ),
-            )),
-            string_tree.from_string("\n"),
-            serialize_statement(ir.Add(to: ir.RSP, from: ir.Immediate(size))),
-          ])
-
-        _ ->
+      case ir.size_of(x) {
+        8 | 2 ->
           string_tree.concat([
             string_tree.from_string("pop "),
             serialize_value(x),
           ])
+
+        4 as size | 1 as size ->
+          string_tree.concat([
+            serialize_statement(ir.Move(to: x, from: ir.deref(ir.RSP, 0, size))),
+            string_tree.from_string("\n"),
+            serialize_statement(ir.Add(
+              to: ir.RSP,
+              from: ir.Immediate(value: size, size: 8),
+            )),
+          ])
+
+        _ -> panic
       }
     }
 
@@ -289,55 +289,49 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       ])
 
     ir.Push(x) -> {
-      case x {
-        ir.Register(size: 1 as size, ..)
-        | ir.Register(size: 4 as size, ..)
-        | ir.Deref(size: 1 as size, ..)
-        | ir.Deref(size: 4 as size, ..) ->
-          string_tree.concat([
-            serialize_statement(ir.Sub(to: ir.RSP, from: ir.Immediate(size))),
-            string_tree.from_string("\n"),
-            serialize_statement(ir.Move(
-              to: ir.Deref(
-                value: ir.RSP,
-                offset: ir.Immediate(0),
-                multiplier: 1,
-                size:,
-              ),
-              from: x,
-            )),
-          ])
-
-        _ ->
+      case ir.size_of(x) {
+        8 | 2 ->
           string_tree.concat([
             string_tree.from_string("push "),
             serialize_value(x),
           ])
+
+        4 as size | 1 as size ->
+          string_tree.concat([
+            serialize_statement(ir.Sub(
+              to: ir.RSP,
+              from: ir.Immediate(value: size, size: 8),
+            )),
+            string_tree.from_string("\n"),
+            serialize_statement(ir.Move(to: ir.deref(ir.RSP, 0, size), from: x)),
+          ])
+
+        _ -> panic
       }
     }
 
-    ir.Sub(to:, from:) ->
+    ir.Sub(to:, from:) -> {
+      assert ir.size_of(to) == ir.size_of(from)
       string_tree.concat([
         string_tree.from_string("sub "),
         serialize_value(to),
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+    }
 
-    ir.Cmp(x, y) ->
+    ir.Cmp(x, y) -> {
+      assert ir.size_of(x) == ir.size_of(y)
       string_tree.concat([
         string_tree.from_string("cmp "),
         serialize_value(x),
         string_tree.from_string(", "),
         serialize_value(y),
       ])
+    }
 
     ir.ExtractZF(to) -> {
-      let size = case to {
-        ir.Deref(size:, ..) -> size
-        ir.Register(size:, ..) -> size
-        _ -> panic
-      }
+      let size = ir.size_of(to)
 
       let out_register = ir.Register(reg: ir.RegA, size:)
       let aux_register = ir.Register(reg: ir.RegC, size:)
@@ -351,25 +345,29 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
         string_tree.from_string(", "),
         serialize_register(aux_register),
         string_tree.from_string("\n"),
-        string_tree.from_string("popf"),
+        string_tree.from_string("add rsp, 8"),
       ])
     }
 
-    ir.And(to:, from:) ->
+    ir.And(to:, from:) -> {
+      assert ir.size_of(to) == ir.size_of(from)
       string_tree.concat([
         string_tree.from_string("and "),
         serialize_value(to),
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+    }
 
-    ir.Or(to:, from:) ->
+    ir.Or(to:, from:) -> {
+      assert ir.size_of(to) == ir.size_of(from)
       string_tree.concat([
         string_tree.from_string("or "),
         serialize_value(to),
         string_tree.from_string(", "),
         serialize_value(from),
       ])
+    }
 
     ir.Not(x) ->
       string_tree.concat([string_tree.from_string("not "), serialize_value(x)])
@@ -377,20 +375,30 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
     ir.Neg(x) ->
       string_tree.concat([string_tree.from_string("neg "), serialize_value(x)])
 
-    ir.JGE(x) ->
+    ir.JGE(x) -> {
+      assert ir.size_of(x) == 8
       string_tree.concat([string_tree.from_string("jge "), serialize_value(x)])
+    }
 
-    ir.JGT(x) ->
+    ir.JGT(x) -> {
+      assert ir.size_of(x) == 8
       string_tree.concat([string_tree.from_string("jg "), serialize_value(x)])
+    }
 
-    ir.JLE(x) ->
+    ir.JLE(x) -> {
+      assert ir.size_of(x) == 8
       string_tree.concat([string_tree.from_string("jle "), serialize_value(x)])
+    }
 
-    ir.JLT(x) ->
+    ir.JLT(x) -> {
+      assert ir.size_of(x) == 8
       string_tree.concat([string_tree.from_string("jl "), serialize_value(x)])
+    }
 
-    ir.Jump(x) ->
+    ir.Jump(x) -> {
+      assert ir.size_of(x) == 8
       string_tree.concat([string_tree.from_string("jmp "), serialize_value(x)])
+    }
   }
 }
 

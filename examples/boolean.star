@@ -1,7 +1,7 @@
 fn main() {
     x int16 := 5
-    y := 2 + 4 - x //!= 3 FIXME something weird with flags
-    print_bool(true)//y != false == false == false != false)
+    y := 2 + 4 - x != 1
+    print_bool(y != false == false == false != false)
 
     ptr *int16 := &x
     value int16 := 40

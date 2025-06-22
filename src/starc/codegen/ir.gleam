@@ -36,7 +36,7 @@ pub type Statement {
 }
 
 pub type Value {
-  Immediate(Int)
+  Immediate(value: Int, size: Int)
   Register(reg: Register, size: Int)
   LabelAddress(String)
   Deref(value: Value, offset: Value, multiplier: Int, size: Int)
@@ -50,4 +50,26 @@ pub type Register {
   RegB
   RegC
   RegD
+}
+
+pub fn size_of(x: Value) -> Int {
+  case x {
+    Immediate(size:, ..) -> size
+    Register(size:, ..) -> size
+    LabelAddress(..) -> 8
+    Deref(size:, ..) -> size
+    RBP -> 8
+    RSI -> 8
+    RSP -> 8
+  }
+}
+
+pub fn deref(x: Value, offset: Int, size: Int) -> Value {
+  assert size_of(x) == 8
+  Deref(
+    value: x,
+    offset: Immediate(value: offset, size: 8),
+    multiplier: 1,
+    size:,
+  )
 }

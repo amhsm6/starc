@@ -10,18 +10,14 @@ import starc/parser/ast
 
 fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
   case expr {
-    ast.TypedIntExpr(value:, ..) -> pure(ir.Immediate(value))
+    ast.TypedIntExpr(value:, ty:) ->
+      pure(ir.Immediate(value:, size: ast.size_of(ty)))
 
-    ast.TypedBoolExpr(True) -> pure(ir.Immediate(1))
-    ast.TypedBoolExpr(False) -> pure(ir.Immediate(0))
+    ast.TypedBoolExpr(True) -> pure(ir.Immediate(value: 1, size: 1))
+    ast.TypedBoolExpr(False) -> pure(ir.Immediate(value: 0, size: 1))
 
     ast.TypedVarExpr(ty:, frame_offset:, ..) ->
-      pure(ir.Deref(
-        value: ir.RBP,
-        offset: ir.Immediate(frame_offset),
-        multiplier: 1,
-        size: ast.size_of(ty),
-      ))
+      pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
 
     ast.TypedAddrOfExpr(e:, ..) -> {
       case e {
@@ -31,17 +27,13 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
             emit([
               ir.Lea(
                 to: ir.Register(reg: ir.RegA, size: 8),
-                from: ir.Deref(
-                  value: ir.RBP,
-                  offset: ir.Immediate(frame_offset),
-                  multiplier: 1,
-                  size:,
-                ),
+                from: ir.deref(ir.RBP, frame_offset, size),
               ),
             ]),
           )
           pure(ir.Register(reg: ir.RegA, size: 8))
         }
+
         _ -> panic
       }
     }
@@ -53,21 +45,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           use _ <- perform(
             emit([ir.Move(to: ir.Register(reg: ir.RegA, size:), from: e)]),
           )
-          pure(ir.Deref(
-            value: ir.Register(reg: ir.RegA, size:),
-            offset: ir.Immediate(0),
-            multiplier: 1,
-            size: ast.size_of(ty),
-          ))
+          pure(ir.deref(ir.Register(reg: ir.RegA, size:), 0, ast.size_of(ty)))
         }
 
-        _ ->
-          pure(ir.Deref(
-            value: e,
-            offset: ir.Immediate(0),
-            multiplier: 1,
-            size: ast.size_of(ty),
-          ))
+        _ -> pure(ir.deref(e, 0, ast.size_of(ty)))
       }
     }
 
@@ -81,11 +62,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Move(to: aux_register, from: ir.RSP),
           ir.Lea(
             to: ir.RSI,
-            from: ir.Deref(
-              value: ir.RBP,
-              offset: ir.Immediate(return_frame_offset),
-              multiplier: 1,
-              size: ast.size_of(return_type),
+            from: ir.deref(
+              ir.RBP,
+              return_frame_offset,
+              ast.size_of(return_type),
             ),
           ),
         ]),
@@ -108,12 +88,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         ]),
       )
 
-      pure(ir.Deref(
-        value: ir.RBP,
-        offset: ir.Immediate(return_frame_offset),
-        multiplier: 1,
-        size: ast.size_of(return_type),
-      ))
+      pure(ir.deref(ir.RBP, return_frame_offset, ast.size_of(return_type)))
     }
 
     ast.TypedAddExpr(e1:, e2:, ty:) -> {
@@ -256,7 +231,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Cmp(aux_register, e2),
           ir.ExtractZF(out_register),
           ir.Not(out_register),
-          ir.And(to: out_register, from: ir.Immediate(1)),
+          ir.And(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Pop(aux_register_save),
         ]),
       )
@@ -281,10 +256,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Cmp(aux_register, e2),
           ir.JGT(ir.LabelAddress("1f")),
-          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 0, size: 1)),
           ir.Jump(ir.LabelAddress("2f")),
           ir.Label("1"),
-          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
           ir.Pop(aux_register_save),
         ]),
@@ -310,10 +285,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Cmp(aux_register, e2),
           ir.JGE(ir.LabelAddress("1f")),
-          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 0, size: 1)),
           ir.Jump(ir.LabelAddress("2f")),
           ir.Label("1"),
-          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
           ir.Pop(aux_register_save),
         ]),
@@ -339,10 +314,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Cmp(aux_register, e2),
           ir.JLT(ir.LabelAddress("1f")),
-          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 0, size: 1)),
           ir.Jump(ir.LabelAddress("2f")),
           ir.Label("1"),
-          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
           ir.Pop(aux_register_save),
         ]),
@@ -368,10 +343,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Cmp(aux_register, e2),
           ir.JLE(ir.LabelAddress("1f")),
-          ir.Move(to: out_register, from: ir.Immediate(0)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 0, size: 1)),
           ir.Jump(ir.LabelAddress("2f")),
           ir.Label("1"),
-          ir.Move(to: out_register, from: ir.Immediate(1)),
+          ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
           ir.Pop(aux_register_save),
         ]),
@@ -430,7 +405,9 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
 
     ast.TypedNotExpr(e) -> {
       use e <- perform(generate_expression(e))
-      use _ <- perform(emit([ir.Not(e), ir.And(to: e, from: ir.Immediate(1))]))
+      use _ <- perform(
+        emit([ir.Not(e), ir.And(to: e, from: ir.Immediate(value: 1, size: 1))]),
+      )
       pure(e)
     }
   }
@@ -444,12 +421,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
           use expr <- perform(generate_expression(expr))
           emit([
             ir.Move(
-              to: ir.Deref(
-                value: ir.RBP,
-                offset: ir.Immediate(frame_offset),
-                multiplier: 1,
-                size: ast.size_of(ty),
-              ),
+              to: ir.deref(ir.RBP, frame_offset, ast.size_of(ty)),
               from: expr,
             ),
           ])
@@ -466,15 +438,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
           use expr <- perform(generate_expression(expr))
 
           emit([
-            ir.Move(
-              to: ir.Deref(
-                value: aux_regiser,
-                offset: ir.Immediate(0),
-                multiplier: 1,
-                size: ast.size_of(ty),
-              ),
-              from: expr,
-            ),
+            ir.Move(to: ir.deref(aux_regiser, 0, ast.size_of(ty)), from: expr),
             ir.Pop(aux_regiser),
           ])
         }
@@ -493,15 +457,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
 
       use expr <- perform(generate_expression(expr))
       emit([
-        ir.Move(
-          to: ir.Deref(
-            value: ir.RBP,
-            offset: ir.Immediate(frame_offset),
-            multiplier: 1,
-            size: ast.size_of(ty),
-          ),
-          from: expr,
-        ),
+        ir.Move(to: ir.deref(ir.RBP, frame_offset, ast.size_of(ty)), from: expr),
       ])
     }
 
@@ -511,17 +467,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
       let size = ast.type_of(expr) |> ast.size_of()
 
       use expr <- perform(generate_expression(expr))
-      emit([
-        ir.Move(
-          to: ir.Deref(
-            value: ir.RSI,
-            offset: ir.Immediate(0),
-            multiplier: 1,
-            size:,
-          ),
-          from: expr,
-        ),
-      ])
+      emit([ir.Move(to: ir.deref(ir.RSI, 0, size), from: expr)])
     }
   }
 }
