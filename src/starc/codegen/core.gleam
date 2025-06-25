@@ -11,6 +11,7 @@ pub type Generator(a, r) {
     run: fn(
       Environment,
       fn(Environment, List(ir.Statement), a) -> r,
+      fn(a) -> r,
       fn(CodegenError) -> r,
     ) ->
       r,
@@ -18,20 +19,25 @@ pub type Generator(a, r) {
 }
 
 pub fn pure(x: a) -> Generator(a, r) {
-  use env, succ, _ <- Generator
+  use env, succ, _, _ <- Generator
   succ(env, [], x)
 }
 
 pub fn die(err: CodegenError) -> Generator(a, r) {
-  use _, _, fail <- Generator
+  use _, _, _, fail <- Generator
   fail(err)
+}
+
+pub fn return_found(x: a) -> Generator(a, r) {
+  use _, _, return_found, _ <- Generator
+  return_found(x)
 }
 
 pub fn perform(
   g: Generator(a, r),
   f: fn(a) -> Generator(b, r),
 ) -> Generator(b, r) {
-  use env, succ, fail <- Generator
+  use env, succ, return_found, fail <- Generator
 
   g.run(
     env,
@@ -39,9 +45,11 @@ pub fn perform(
       f(x).run(
         env,
         fn(env, code2, y) { succ(env, list.append(code, code2), y) },
+        return_found,
         fail,
       )
     },
+    fn(_) { panic },
     fail,
   )
 }
@@ -51,17 +59,17 @@ pub fn map(g: Generator(a, r), f: fn(a) -> b) -> Generator(b, r) {
 }
 
 pub fn emit(code: List(ir.Statement)) -> Generator(Nil, r) {
-  use env, succ, _ <- Generator
+  use env, succ, _, _ <- Generator
   succ(env, code, Nil)
 }
 
 pub fn get() -> Generator(Environment, r) {
-  use env, succ, _ <- Generator
+  use env, succ, _, _ <- Generator
   succ(env, [], env)
 }
 
 pub fn set(env: Environment) -> Generator(Nil, r) {
-  use _, succ, _ <- Generator
+  use _, succ, _, _ <- Generator
   succ(env, [], Nil)
 }
 
@@ -77,11 +85,43 @@ pub fn traverse(
   |> map(list.reverse)
 }
 
+pub fn traverse_until_return(
+  list: List(a),
+  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), CodegenError)),
+) -> Generator(#(List(b), Bool), r) {
+  use env, succ, _, fail <- Generator
+
+  case traverse_until_return_loop(list, f, env, []) {
+    Ok(#(env, x, return_found)) -> succ(env, [], #(x, return_found))
+    Error(err) -> fail(err)
+  }
+}
+
+fn traverse_until_return_loop(
+  list: List(a),
+  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), CodegenError)),
+  env: Environment,
+  result: List(b),
+) -> Result(#(Environment, List(b), Bool), CodegenError) {
+  case list {
+    [x, ..xs] ->
+      f(x).run(
+        env,
+        fn(env, _, y) { traverse_until_return_loop(xs, f, env, [y, ..result]) },
+        fn(y) { Ok(#(env, list.reverse([y, ..result]), True)) },
+        Error,
+      )
+
+    [] -> Ok(#(env, list.reverse(result), False))
+  }
+}
+
 pub fn generate(
   gen: Generator(a, Result(List(ir.Statement), CodegenError)),
 ) -> Result(List(ir.Statement), CodegenError) {
-  let env = Environment(frames: [env.builtin()], frame_offset: 0)
-  gen.run(env, fn(_, code, _) { Ok(code) }, Error)
+  let env =
+    Environment(frames: [env.builtin()], frame_offset: 0, return_type: ast.Void)
+  gen.run(env, fn(_, code, _) { Ok(code) }, fn(_) { panic }, Error)
 }
 
 pub fn push_frame() -> Generator(Nil, r) {
@@ -96,7 +136,7 @@ pub fn pop_frame() -> Generator(Nil, r) {
 
 pub fn set_frame_offset(frame_offset: Int) -> Generator(Nil, r) {
   use env <- perform(get())
-  set(env.set_frame_offset(env, frame_offset))
+  set(Environment(..env, frame_offset:))
 }
 
 pub fn get_frame_offset() -> Generator(Int, r) {
@@ -112,6 +152,16 @@ pub fn add_frame_offset(offset: Int) -> Generator(Nil, r) {
 pub fn sub_frame_offset(offset: Int) -> Generator(Nil, r) {
   use env <- perform(get())
   set(env.sub_frame_offset(env, offset))
+}
+
+pub fn set_return_type(ty: ast.Type) -> Generator(Nil, r) {
+  use env <- perform(get())
+  set(Environment(..env, return_type: ty))
+}
+
+pub fn get_return_type() -> Generator(ast.Type, r) {
+  use env <- perform(get())
+  pure(env.return_type)
 }
 
 pub fn insert_symbol(id: ast.Identifier, sym: Symbol) -> Generator(Nil, r) {

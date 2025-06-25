@@ -5,8 +5,9 @@ import gleam/string
 
 import starc/codegen/core.{
   type Generator, add_frame_offset, assert_unique_symbol, die, get_frame_offset,
-  insert_symbol, perform, pop_frame, pure, push_frame, resolve_symbol,
-  resolve_type, set_frame_offset, sub_frame_offset, traverse,
+  get_return_type, insert_symbol, perform, pop_frame, pure, push_frame,
+  resolve_symbol, resolve_type, return_found, set_frame_offset, set_return_type,
+  sub_frame_offset, traverse, traverse_until_return,
 }
 import starc/codegen/env.{Function, TypeError, Variable}
 import starc/parser/ast
@@ -336,7 +337,6 @@ fn analyze_expression(
 
 fn analyze_statement(
   statement: ast.UntypedStatement,
-  function_return_type: ast.Type,
 ) -> Generator(ast.TypedStatement, r) {
   case statement {
     ast.UntypedAssignStatement(cell:, expr:) -> {
@@ -378,13 +378,45 @@ fn analyze_statement(
       ))
     }
 
-    ast.UntypedIfStatement(condition:, block:, elseifs:, elseblock:) -> todo
+    ast.UntypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
+      todo
+      // use condition <- perform(analyze_expression(condition))
+      // use _ <- perform(unify(ast.type_of(condition), ast.Bool))
+
+      // use block <- perform(traverse(block, analyze_statement))
+
+      // use elseifs <- perform(
+      //   traverse(elseifs, fn(x) {
+      //     let #(condition, block) = x
+
+      //     use condition <- perform(analyze_expression(condition))
+      //     use _ <- perform(unify(ast.type_of(condition), ast.Bool))
+
+      //     use block <- perform(traverse(block, analyze_statement))
+
+      //     pure(#(condition, block))
+      //   }),
+      // )
+
+      // use elseblock <- perform(case elseblock {
+      //   None -> pure(None)
+
+      //   Some(block) ->
+      //     traverse(block, analyze_statement)
+      //     |> core.map(Some)
+      // })
+
+      // pure(ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:))
+    }
 
     ast.UntypedReturnStatement(expr) -> {
       use expr <- perform(analyze_expression(expr))
-      use ty <- perform(unify(function_return_type, ast.type_of(expr)))
+
+      use return_type <- perform(get_return_type())
+      use ty <- perform(unify(return_type, ast.type_of(expr)))
+
       use expr <- perform(typify_constants(expr, ty))
-      pure(ast.TypedReturnStatement(expr))
+      return_found(ast.TypedReturnStatement(expr))
     }
   }
 }
@@ -435,7 +467,17 @@ fn analyze_declaration(
       )
 
       use _ <- perform(set_frame_offset(0))
-      use body <- perform(traverse(body, analyze_statement(_, return_type)))
+      use _ <- perform(set_return_type(return_type))
+
+      use #(body, return_found) <- perform(traverse_until_return(
+        body,
+        analyze_statement,
+      ))
+      use _ <- perform(case return_type, return_found {
+        ast.Void, _ | _, True -> pure(Nil)
+        _, False -> die(TypeError("Function must return"))
+      })
+
       use frame_offset <- perform(get_frame_offset())
 
       use _ <- perform(pop_frame())

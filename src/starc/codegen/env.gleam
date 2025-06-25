@@ -5,7 +5,7 @@ import gleam/result
 import starc/parser/ast
 
 pub type Environment {
-  Environment(frames: List(Frame), frame_offset: Int)
+  Environment(frames: List(Frame), frame_offset: Int, return_type: ast.Type)
 }
 
 pub type Frame {
@@ -23,9 +23,9 @@ pub type Symbol {
 pub type CodegenError {
   UnknownType(ast.Identifier)
   UnknownSymbol(ast.Identifier)
-  TypeError(String)
   DuplicateType(ast.Identifier)
   DuplicateSymbol(ast.Identifier)
+  TypeError(String)
 }
 
 pub fn builtin() -> Frame {
@@ -90,10 +90,6 @@ pub fn push_frame(env: Environment) -> Environment {
 pub fn pop_frame(env: Environment) -> Environment {
   let assert [_, ..frames] = env.frames
   Environment(..env, frames:)
-}
-
-pub fn set_frame_offset(env: Environment, frame_offset: Int) -> Environment {
-  Environment(..env, frame_offset:)
 }
 
 pub fn add_frame_offset(env: Environment, offset: Int) -> Environment {

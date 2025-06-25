@@ -19,70 +19,80 @@ false: .ascii "false\n\0"
 
 print_int64:
     push rsi
+    push rbx
 
     mov rdi, offset qwordmsg
-    mov rsi, qword ptr [rsp + 16]
+    mov rsi, qword ptr [rsp + 24]
 
     mov rbx, rsp
     and rsp, -16
     call printf
     mov rsp, rbx
 
+    pop rbx
     pop rsi
 
     ret
 
 print_int32:
     push rsi
+    push rbx
 
     mov rdi, offset dwordmsg
 
     mov rsi, 0
-    mov esi, dword ptr [rsp + 16]
+    mov esi, dword ptr [rsp + 24]
 
     mov rbx, rsp
     and rsp, -16
     call printf
     mov rsp, rbx
 
+    pop rbx
     pop rsi
 
     ret
 
 print_int16:
     push rsi
+    push rbx
 
     mov rdi, offset wordmsg
-    movzx rsi, word ptr [rsp + 16]
+    movzx rsi, word ptr [rsp + 24]
 
     mov rbx, rsp
     and rsp, -16
     call printf
     mov rsp, rbx
 
+    pop rbx
     pop rsi
 
     ret
 
 print_int8:
     push rsi
+    push rbx
 
     mov rdi, offset bytemsg
-    movzx rsi, byte ptr [rsp + 16]
+    movzx rsi, byte ptr [rsp + 24]
 
     mov rbx, rsp
     and rsp, -16
     call printf
     mov rsp, rbx
 
+    pop rbx
     pop rsi
 
     ret
 
 print_bool:
-    mov al, byte ptr [rsp + 8]
+    push rbx
 
-    test al, al
+    mov bl, byte ptr [rsp + 16]
+
+    test bl, bl
     jz print_false
 
 print_true:
@@ -97,5 +107,7 @@ print:
     and rsp, -16
     call printf
     mov rsp, rbx
+
+    pop rbx
 
     ret
