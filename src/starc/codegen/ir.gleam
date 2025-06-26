@@ -16,6 +16,8 @@ pub type Statement {
   Call(Value)
 
   Jump(Value)
+  JE(Value)
+  JNE(Value)
   JGT(Value)
   JGE(Value)
   JLT(Value)

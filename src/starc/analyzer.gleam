@@ -335,6 +335,16 @@ fn analyze_expression(
   }
 }
 
+// FIXMEEEEEE
+fn specialized_analyze_statement(
+  statement: ast.UntypedStatement,
+) -> Generator(
+  ast.TypedStatement,
+  Result(#(env.Environment, List(b), Bool), env.CodegenError),
+) {
+  analyze_statement(statement)
+}
+
 fn analyze_statement(
   statement: ast.UntypedStatement,
 ) -> Generator(ast.TypedStatement, r) {
@@ -379,34 +389,67 @@ fn analyze_statement(
     }
 
     ast.UntypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
-      todo
-      // use condition <- perform(analyze_expression(condition))
-      // use _ <- perform(unify(ast.type_of(condition), ast.Bool))
+      use condition <- perform(analyze_expression(condition))
+      use _ <- perform(unify(ast.type_of(condition), ast.Bool))
 
-      // use block <- perform(traverse(block, analyze_statement))
+      use _ <- perform(push_frame())
+      use #(block, if_return_found) <- perform(traverse_until_return(
+        block,
+        specialized_analyze_statement,
+      ))
+      use _ <- perform(pop_frame())
 
-      // use elseifs <- perform(
-      //   traverse(elseifs, fn(x) {
-      //     let #(condition, block) = x
+      use elseifs <- perform(
+        traverse(elseifs, fn(x) {
+          let #(condition, block) = x
 
-      //     use condition <- perform(analyze_expression(condition))
-      //     use _ <- perform(unify(ast.type_of(condition), ast.Bool))
+          use condition <- perform(analyze_expression(condition))
+          use _ <- perform(unify(ast.type_of(condition), ast.Bool))
 
-      //     use block <- perform(traverse(block, analyze_statement))
+          use _ <- perform(push_frame())
+          use #(block, return_found) <- perform(traverse_until_return(
+            block,
+            specialized_analyze_statement,
+          ))
+          use _ <- perform(pop_frame())
 
-      //     pure(#(condition, block))
-      //   }),
-      // )
+          pure(#(condition, block, return_found))
+        }),
+      )
 
-      // use elseblock <- perform(case elseblock {
-      //   None -> pure(None)
+      let #(elseifs_return_found, elseifs) =
+        list.map_fold(elseifs, True, fn(acc, x) {
+          let #(condition, block, return_found) = x
+          #(acc && return_found, #(condition, block))
+        })
 
-      //   Some(block) ->
-      //     traverse(block, analyze_statement)
-      //     |> core.map(Some)
-      // })
+      use #(elseblock, elseblock_return_found) <- perform(case elseblock {
+        None -> pure(#(None, False))
 
-      // pure(ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:))
+        Some(block) -> {
+          use _ <- perform(push_frame())
+          use #(block, return_found) <- perform(traverse_until_return(
+            block,
+            specialized_analyze_statement,
+          ))
+          use _ <- perform(pop_frame())
+
+          pure(#(Some(block), return_found))
+        }
+      })
+
+      case if_return_found && elseifs_return_found && elseblock_return_found {
+        True ->
+          return_found(ast.TypedIfStatement(
+            condition:,
+            block:,
+            elseifs:,
+            elseblock:,
+          ))
+
+        False ->
+          pure(ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:))
+      }
     }
 
     ast.UntypedReturnStatement(expr) -> {
@@ -471,7 +514,7 @@ fn analyze_declaration(
 
       use #(body, return_found) <- perform(traverse_until_return(
         body,
-        analyze_statement,
+        specialized_analyze_statement,
       ))
       use _ <- perform(case return_type, return_found {
         ast.Void, _ | _, True -> pure(Nil)

@@ -1,4 +1,5 @@
 import gleam/list
+import gleam/option.{None, Some}
 
 import starc/analyzer
 import starc/codegen/core.{
@@ -461,13 +462,58 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
       ])
     }
 
-    ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:) -> todo
+    // FIXME: labels
+    ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
+      use condition <- perform(generate_expression(condition))
+      use _ <- perform(
+        emit([
+          ir.Cmp(condition, ir.Immediate(value: 1, size: ir.size_of(condition))),
+          ir.JNE(ir.LabelAddress("1f")),
+        ]),
+      )
+
+      use _ <- perform(traverse(block, generate_statement))
+      use _ <- perform(emit([ir.Jump(ir.LabelAddress("2f"))]))
+
+      use _ <- perform(
+        traverse(elseifs, fn(x) {
+          let #(condition, block) = x
+
+          use _ <- perform(emit([ir.Label("1")]))
+
+          use condition <- perform(generate_expression(condition))
+          use _ <- perform(
+            emit([
+              ir.Cmp(
+                condition,
+                ir.Immediate(value: 1, size: ir.size_of(condition)),
+              ),
+              ir.JNE(ir.LabelAddress("1f")),
+            ]),
+          )
+
+          use _ <- perform(traverse(block, generate_statement))
+          emit([ir.Jump(ir.LabelAddress("2f"))])
+        }),
+      )
+
+      use _ <- perform(emit([ir.Label("1")]))
+      use _ <- perform(case elseblock {
+        None -> pure([])
+        Some(block) -> traverse(block, generate_statement)
+      })
+
+      emit([ir.Label("2")])
+    }
 
     ast.TypedReturnStatement(expr) -> {
       let size = ast.type_of(expr) |> ast.size_of()
 
       use expr <- perform(generate_expression(expr))
-      emit([ir.Move(to: ir.deref(ir.RSI, 0, size), from: expr)])
+      emit([
+        ir.Move(to: ir.deref(ir.RSI, 0, size), from: expr),
+        ir.Jump(ir.LabelAddress("9f")),
+      ])
     }
   }
 }
@@ -479,7 +525,7 @@ fn generate_function(declaration: ast.TypedDeclaration) -> Generator(Nil, r) {
 
   use _ <- perform(traverse(body, generate_statement))
 
-  use _ <- perform(emit([ir.Epilogue]))
+  use _ <- perform(emit([ir.Label("9"), ir.Epilogue]))
 
   pure(Nil)
 }

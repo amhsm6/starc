@@ -322,12 +322,31 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
 
     ir.Cmp(x, y) -> {
       assert ir.size_of(x) == ir.size_of(y)
-      string_tree.concat([
-        string_tree.from_string("cmp "),
-        serialize_value(x),
-        string_tree.from_string(", "),
-        serialize_value(y),
-      ])
+
+      case x {
+        ir.Immediate(size:, ..) -> {
+          let aux_register =
+            serialize_register(ir.Register(reg: ir.RegC, size:))
+          string_tree.concat([
+            string_tree.from_string("mov "),
+            aux_register,
+            string_tree.from_string(", "),
+            serialize_value(x),
+            string_tree.from_string("\n"),
+            string_tree.from_string("cmp "),
+            aux_register,
+            string_tree.from_string(", "),
+            serialize_value(y),
+          ])
+        }
+        _ ->
+          string_tree.concat([
+            string_tree.from_string("cmp "),
+            serialize_value(x),
+            string_tree.from_string(", "),
+            serialize_value(y),
+          ])
+      }
     }
 
     ir.ExtractZF(to) -> {
@@ -374,6 +393,16 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
 
     ir.Neg(x) ->
       string_tree.concat([string_tree.from_string("neg "), serialize_value(x)])
+
+    ir.JE(x) -> {
+      assert ir.size_of(x) == 8
+      string_tree.concat([string_tree.from_string("je "), serialize_value(x)])
+    }
+
+    ir.JNE(x) -> {
+      assert ir.size_of(x) == 8
+      string_tree.concat([string_tree.from_string("jne "), serialize_value(x)])
+    }
 
     ir.JGE(x) -> {
       assert ir.size_of(x) == 8
