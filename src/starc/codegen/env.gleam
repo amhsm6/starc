@@ -1,11 +1,17 @@
 import gleam/dict.{type Dict}
+import gleam/int
 import gleam/list
 import gleam/result
 
 import starc/parser/ast
 
 pub type Environment {
-  Environment(frames: List(Frame), frame_offset: Int, return_type: ast.Type)
+  Environment(
+    frames: List(Frame),
+    frame_offset: Int,
+    return_type: ast.Type,
+    label_counter: Int,
+  )
 }
 
 pub type Frame {
@@ -98,6 +104,14 @@ pub fn add_frame_offset(env: Environment, offset: Int) -> Environment {
 
 pub fn sub_frame_offset(env: Environment, offset: Int) -> Environment {
   Environment(..env, frame_offset: env.frame_offset - offset)
+}
+
+pub fn generate_label(env: Environment) -> #(Environment, String) {
+  let counter = env.label_counter
+  #(
+    Environment(..env, label_counter: counter + 1),
+    "label" <> int.to_string(counter),
+  )
 }
 
 pub fn insert_symbol(

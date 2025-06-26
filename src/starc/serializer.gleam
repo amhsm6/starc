@@ -351,18 +351,16 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
 
     ir.ExtractZF(to) -> {
       let size = ir.size_of(to)
-
-      let out_register = ir.Register(reg: ir.RegA, size:)
-      let aux_register = ir.Register(reg: ir.RegC, size:)
+      let aux_register = serialize_register(ir.Register(reg: ir.RegC, size:))
 
       string_tree.concat([
         string_tree.from_string("pushf\n"),
         string_tree.from_string("mov rcx, 0b0000000100000110\n"),
         string_tree.from_string("bextr rcx, qword ptr [rsp], rcx\n"),
         string_tree.from_string("mov "),
-        serialize_register(out_register),
+        serialize_value(to),
         string_tree.from_string(", "),
-        serialize_register(aux_register),
+        aux_register,
         string_tree.from_string("\n"),
         string_tree.from_string("add rsp, 8"),
       ])

@@ -11,7 +11,7 @@ pub type Generator(a, r) {
     run: fn(
       Environment,
       fn(Environment, List(ir.Statement), a) -> r,
-      fn(a) -> r,
+      fn(Environment, a) -> r,
       fn(CodegenError) -> r,
     ) ->
       r,
@@ -29,8 +29,8 @@ pub fn die(err: CodegenError) -> Generator(a, r) {
 }
 
 pub fn return_found(x: a) -> Generator(a, r) {
-  use _, _, return_found, _ <- Generator
-  return_found(x)
+  use env, _, return_found, _ <- Generator
+  return_found(env, x)
 }
 
 pub fn perform(
@@ -49,7 +49,7 @@ pub fn perform(
         fail,
       )
     },
-    fn(_) { panic },
+    fn(_, _) { panic },
     fail,
   )
 }
@@ -108,7 +108,7 @@ fn traverse_until_return_loop(
       f(x).run(
         env,
         fn(env, _, y) { traverse_until_return_loop(xs, f, env, [y, ..result]) },
-        fn(y) { Ok(#(env, list.reverse([y, ..result]), True)) },
+        fn(env, y) { Ok(#(env, list.reverse([y, ..result]), True)) },
         Error,
       )
 
@@ -120,8 +120,14 @@ pub fn generate(
   gen: Generator(a, Result(List(ir.Statement), CodegenError)),
 ) -> Result(List(ir.Statement), CodegenError) {
   let env =
-    Environment(frames: [env.builtin()], frame_offset: 0, return_type: ast.Void)
-  gen.run(env, fn(_, code, _) { Ok(code) }, fn(_) { panic }, Error)
+    Environment(
+      frames: [env.builtin()],
+      frame_offset: 0,
+      return_type: ast.Void,
+      label_counter: 0,
+    )
+
+  gen.run(env, fn(_, code, _) { Ok(code) }, fn(_, _) { panic }, Error)
 }
 
 pub fn push_frame() -> Generator(Nil, r) {
@@ -162,6 +168,14 @@ pub fn set_return_type(ty: ast.Type) -> Generator(Nil, r) {
 pub fn get_return_type() -> Generator(ast.Type, r) {
   use env <- perform(get())
   pure(env.return_type)
+}
+
+pub fn generate_label() -> Generator(String, r) {
+  use env <- perform(get())
+  let #(env, label) = env.generate_label(env)
+
+  use _ <- perform(set(env))
+  pure(label)
 }
 
 pub fn insert_symbol(id: ast.Identifier, sym: Symbol) -> Generator(Nil, r) {

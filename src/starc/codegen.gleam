@@ -3,7 +3,7 @@ import gleam/option.{None, Some}
 
 import starc/analyzer
 import starc/codegen/core.{
-  type Generator, emit, generate, perform, pure, traverse,
+  type Generator, emit, generate, generate_label, perform, pure, traverse,
 }
 import starc/codegen/env.{type CodegenError}
 import starc/codegen/ir
@@ -462,24 +462,34 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
       ])
     }
 
-    // FIXME: labels
     ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
+      use end_label <- perform(generate_label())
+
+      use elseifs_labels <- perform(
+        traverse(elseifs, fn(_) { generate_label() }),
+      )
+      use else_label <- perform(generate_label())
+      let alt_labels = list.append(elseifs_labels, [else_label])
+
+      let assert Ok(false_label) = list.first(alt_labels)
+      let alt_labels = list.window_by_2(alt_labels)
+
       use condition <- perform(generate_expression(condition))
       use _ <- perform(
         emit([
           ir.Cmp(condition, ir.Immediate(value: 1, size: ir.size_of(condition))),
-          ir.JNE(ir.LabelAddress("1f")),
+          ir.JNE(ir.LabelAddress(false_label)),
         ]),
       )
 
       use _ <- perform(traverse(block, generate_statement))
-      use _ <- perform(emit([ir.Jump(ir.LabelAddress("2f"))]))
+      use _ <- perform(emit([ir.Jump(ir.LabelAddress(end_label))]))
 
       use _ <- perform(
-        traverse(elseifs, fn(x) {
-          let #(condition, block) = x
+        traverse(list.zip(elseifs, alt_labels), fn(x) {
+          let #(#(condition, block), #(prev_false_label, next_false_label)) = x
 
-          use _ <- perform(emit([ir.Label("1")]))
+          use _ <- perform(emit([ir.Label(prev_false_label)]))
 
           use condition <- perform(generate_expression(condition))
           use _ <- perform(
@@ -488,22 +498,22 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
                 condition,
                 ir.Immediate(value: 1, size: ir.size_of(condition)),
               ),
-              ir.JNE(ir.LabelAddress("1f")),
+              ir.JNE(ir.LabelAddress(next_false_label)),
             ]),
           )
 
           use _ <- perform(traverse(block, generate_statement))
-          emit([ir.Jump(ir.LabelAddress("2f"))])
+          emit([ir.Jump(ir.LabelAddress(end_label))])
         }),
       )
 
-      use _ <- perform(emit([ir.Label("1")]))
+      use _ <- perform(emit([ir.Label(else_label)]))
       use _ <- perform(case elseblock {
         None -> pure([])
         Some(block) -> traverse(block, generate_statement)
       })
 
-      emit([ir.Label("2")])
+      emit([ir.Label(end_label)])
     }
 
     ast.TypedReturnStatement(expr) -> {

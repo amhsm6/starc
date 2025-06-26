@@ -44,7 +44,6 @@ fn tricky(x int32) int32 {
             if x + x > 30 {
                 return x / 2
             } else {
-                print_int32(x)
                 return x * 3
             }
         } else {
@@ -73,33 +72,33 @@ fn bool_check(a bool, b bool) bool {
 }
 
 fn test_all() {
-    // print_int32(add(10, 20))
+    print_int32(add(10, 20))
 
-    // x int16 := 5
-    // x_ptr *int16 := &x
-    // print_int16(negate(x_ptr))
+    x int16 := 5
+    x_ptr *int16 := &x
+    print_int16(negate(x_ptr))
 
-    // print_int64(scale(12, 5))
+    print_int64(scale(12, 5))
 
-    // a int8 := 2
-    // b int8 := 3
-    // c int8 := 4
-    // print_int8(complex_calc(a, b, c))
+    a int8 := 2
+    b int8 := 3
+    c int8 := 4
+    print_int8(complex_calc(a, b, c))
 
-    // print_bool(logicals(10, 20))
-    // print_bool(logicals(11, 5))
+    print_bool(logicals(10, 20))
+    print_bool(logicals(11, 5))
 
-    // print_int64(test_shadow(5))
-    // print_int64(test_shadow(15))
+    print_int64(test_shadow(5))
+    print_int64(test_shadow(15))
 
-    // print_int64(big_expression(5, 7, 9))
+    print_int64(big_expression(5, 7, 9))
 
-    // v int32 := 30
-    // v_ptr *int32 := &v
-    // print_int32(mutate(v_ptr))
-    // print_int32(v)
+    v int32 := 30
+    v_ptr *int32 := &v
+    print_int32(mutate(v_ptr))
+    print_int32(v)
 
-    // print_int32(tricky(11))
+    print_int32(tricky(11))
     print_int32(tricky(52))
     print_int32(tricky(8))
 
@@ -155,33 +154,33 @@ fn main() {
     i int8 := complex_calc(g, h, g)
     print_int8(i)
 
-    // j int64 := scale(i, 2)
-    // print_int64(j)
-// 
-    // b1 bool := true
-    // b2 bool := false
-    // print_bool(bool_check(b1, b2))
-// 
-    // if b1 {
-        // x int64 := 1234
-        // if x > 1000 {
-            // print_int64(x)
-        // }
-    // } else {
-        // print_int64(0)
-    // }
-// 
-    // print_int32(0)
-    // print_int32(1)
-    // print_int32(2)
-    // print_int32(3)
-    // print_int32(4)
-// 
-    // z int32 := tricky(33)
-    // print_int32(z)
-// 
-    // u int64 := test_shadow(3)
-    // print_int64(u)
-// 
-    // print_int64(big_expression(12, 8, 6))
+    j int64 := scale(45, 2)
+    print_int64(j)
+
+    b1 bool := true
+    b2 bool := false
+    print_bool(bool_check(b1, b2))
+
+    if b1 {
+        x int64 := 1234
+        if x > 1000 {
+            print_int64(x)
+        }
+    } else {
+        print_int64(0)
+    }
+
+    print_int32(0)
+    print_int32(1)
+    print_int32(2)
+    print_int32(3)
+    print_int32(4)
+
+    z int32 := tricky(33)
+    print_int32(z)
+
+    u int64 := test_shadow(3)
+    print_int64(u)
+
+    print_int64(big_expression(12, 8, 6))
 }
