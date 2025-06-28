@@ -1,4 +1,3 @@
-import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/pair
@@ -7,8 +6,14 @@ import gleam/string
 import starc/lexer/token
 import starc/parser/ast
 import starc/parser/core.{
-  type Parser, Message, block_newline, die, eat, eat_exact, eat_newlines, expect,
-  ignore_newline, many, map, maybe, oneof, parse, perform, pure, sep_by, try,
+  type Message, type Parser, block_newline, die, eat, eat_exact, eat_newlines,
+  expect, ignore_newline, many, map, maybe, oneof, parse, perform, pure, sep_by,
+  try,
+}
+
+pub type ParserError {
+  Message(Message)
+  NotParsed(String)
 }
 
 // ================= BASIC =================
@@ -453,25 +458,21 @@ fn parse_function_declaration() -> Parser(ast.UntypedDeclaration, r) {
 
 pub fn parse_program(
   tokens: List(token.Token),
-) -> Result(ast.UntypedProgram, String) {
+) -> Result(ast.UntypedProgram, ParserError) {
   let p = {
     use program <- perform(many(parse_declaration()))
     eat_newlines(pure(program))
   }
 
   case parse(p, tokens) {
-    Ok(#(tree, [token.TokenEOF])) -> Ok(tree)
+    Ok(#(tree, [])) -> Ok(tree)
 
-    Ok(#(_, tokens)) -> Error("Not parsed: " <> string.inspect(tokens))
-    Error(Message(pos:, unexpected:, expected:)) -> {
-      Error(
-        "Error at "
-        <> int.to_string(pos)
-        <> ": Expected "
-        <> string.join(expected, ", ")
-        <> ", but found "
-        <> unexpected,
-      )
-    }
+    Ok(#(_, tokens)) ->
+      Error(NotParsed(
+        "Not parsed: "
+        <> list.map(tokens, fn(t) { t.token_type }) |> string.inspect(),
+      ))
+
+    Error(msg) -> Error(Message(msg))
   }
 }

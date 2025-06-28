@@ -198,6 +198,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
             serialize_register(aux_register),
           ])
         }
+
         _, _ ->
           string_tree.concat([
             string_tree.from_string("mov "),
@@ -339,6 +340,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
             serialize_value(y),
           ])
         }
+
         _ ->
           string_tree.concat([
             string_tree.from_string("cmp "),

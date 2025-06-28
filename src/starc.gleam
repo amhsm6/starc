@@ -8,12 +8,12 @@ import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import shellout
-import simplifile
+import simplifile.{type FileError}
 
 import starc/codegen
 import starc/codegen/env.{type CodegenError}
-import starc/lexer
-import starc/parser
+import starc/lexer.{type LexerError}
+import starc/parser.{type ParserError}
 import starc/serializer
 
 type Command {
@@ -21,9 +21,9 @@ type Command {
 }
 
 type CompileError {
-  FileError(simplifile.FileError)
-  LexerError(lexer.LexerError)
-  ParserError(String)
+  FileError(FileError)
+  LexerError(LexerError)
+  ParserError(ParserError)
   CodegenError(CodegenError)
 }
 
@@ -75,6 +75,7 @@ fn compile(cmd: Command) -> Result(Nil, String) {
   result.map_error(res, fn(err) {
     case err {
       FileError(err) -> "File error: " <> simplifile.describe_error(err)
+
       LexerError(lexer.UnexpectedToken(at:, next:)) ->
         "Lexer error: Unexpected token "
         <> next
@@ -82,7 +83,18 @@ fn compile(cmd: Command) -> Result(Nil, String) {
         <> int.to_string(at.line)
         <> " col "
         <> int.to_string(at.char)
-      ParserError(msg) -> "Parser error: " <> msg
+
+      ParserError(parser.Message(msg)) ->
+        "Parser error at "
+        <> string.inspect(msg.pos)
+        <> ": Expected "
+        <> string.join(msg.expected, ", ")
+        <> ", but found "
+        <> msg.unexpected
+
+      ParserError(parser.NotParsed(not_parsed)) ->
+        "Parser error: Not parsed: " <> not_parsed
+
       CodegenError(err) -> "Codegen error: " <> string.inspect(err)
     }
   })

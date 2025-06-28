@@ -9,7 +9,9 @@ import starc/codegen/core.{
   resolve_symbol, resolve_type, return_found, set_frame_offset, set_return_type,
   sub_frame_offset, traverse, traverse_until_return,
 }
-import starc/codegen/env.{Function, TypeError, Variable}
+import starc/codegen/env.{
+  type CodegenError, type Environment, Function, TypeError, Variable,
+}
 import starc/parser/ast
 
 fn typify_constants(
@@ -340,7 +342,7 @@ fn specialized_analyze_statement(
   statement: ast.UntypedStatement,
 ) -> Generator(
   ast.TypedStatement,
-  Result(#(env.Environment, List(b), Bool), env.CodegenError),
+  Result(#(Environment, List(b), Bool), CodegenError),
 ) {
   analyze_statement(statement)
 }
@@ -369,6 +371,7 @@ fn analyze_statement(
 
       use expr <- perform(case typeid {
         None -> typify_constants(expr, ast.Int64)
+
         Some(typeid) -> {
           use define_ty <- perform(resolve_type(typeid))
           use ty <- perform(unify(define_ty, expr_ty))

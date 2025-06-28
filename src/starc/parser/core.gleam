@@ -3,7 +3,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/string
 
-import starc/lexer/token.{type Token}
+import starc/lexer/token.{type Pos, type Token, type TokenType, Pos, Token}
 
 pub type Parser(a, r) {
   Parser(
@@ -24,13 +24,6 @@ pub type ParserState {
 
 pub type Message {
   Message(pos: Pos, unexpected: String, expected: List(String))
-}
-
-pub type Pos =
-  Int
-
-fn advance_token(pos: Pos) -> Pos {
-  pos + 1
 }
 
 fn merge(msg1: Message, msg2: Message) -> Message {
@@ -120,8 +113,8 @@ pub fn ignore_newline(p: Parser(a, r)) -> Parser(a, r) {
 pub fn eat_newlines(p: Parser(a, r)) -> Parser(a, r) {
   use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
 
-  let is_newline = fn(t) {
-    case t {
+  let is_newline = fn(t: Token) {
+    case t.token_type {
       token.TokenNewline -> True
       _ -> False
     }
@@ -139,7 +132,7 @@ pub fn eat_newlines(p: Parser(a, r)) -> Parser(a, r) {
   )
 }
 
-pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
+pub fn eat(pred: fn(TokenType) -> Bool) -> Parser(TokenType, r) {
   use
     ParserState(tokens:, pos:, ignore_newline:),
     _,
@@ -148,8 +141,8 @@ pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
     _
   <- Parser
 
-  let is_newline = fn(t) {
-    case t {
+  let is_newline = fn(t: Token) {
+    case t.token_type {
       token.TokenNewline -> True
       _ -> False
     }
@@ -162,16 +155,22 @@ pub fn eat(pred: fn(Token) -> Bool) -> Parser(Token, r) {
 
   case tokens {
     [t, ..ts] ->
-      case pred(t) {
+      case pred(t.token_type) {
         True ->
           ok_consumed(
-            ParserState(tokens: ts, pos: advance_token(pos), ignore_newline:),
-            t,
+            ParserState(tokens: ts, pos: t.span.end, ignore_newline:),
+            t.token_type,
             Message(pos, "", []),
           )
 
         False ->
-          fail_empty(Message(pos:, unexpected: string.inspect(t), expected: []))
+          fail_empty(
+            Message(
+              pos: t.span.start,
+              unexpected: string.inspect(t.token_type),
+              expected: [],
+            ),
+          )
       }
 
     _ -> fail_empty(Message(pos:, unexpected: "eof", expected: []))
@@ -211,17 +210,6 @@ pub fn try(p: Parser(a, r)) -> Parser(a, r) {
   p.run(state, ok_empty, ok_consumed, fail_empty, fail_empty)
 }
 
-pub fn many(p: Parser(a, r)) -> Parser(List(a), r) {
-  choose(
-    {
-      use x <- perform(p)
-      use xs <- perform(many(p))
-      pure([x, ..xs])
-    },
-    pure([]),
-  )
-}
-
 pub fn expect(p: Parser(a, r), msg: String) -> Parser(a, r) {
   use state, ok_empty, ok_consumed, fail_empty, fail_consumed <- Parser
 
@@ -233,6 +221,17 @@ pub fn expect(p: Parser(a, r), msg: String) -> Parser(a, r) {
     ok_consumed,
     fn(original_msg) { fail_empty(Message(..original_msg, expected: [msg])) },
     fail_consumed,
+  )
+}
+
+pub fn many(p: Parser(a, r)) -> Parser(List(a), r) {
+  choose(
+    {
+      use x <- perform(p)
+      use xs <- perform(many(p))
+      pure([x, ..xs])
+    },
+    pure([]),
   )
 }
 
@@ -262,7 +261,7 @@ pub fn sep_by(p: Parser(a, r), sep: Parser(b, r)) {
   )
 }
 
-pub fn eat_exact(t: Token) -> Parser(Token, r) {
+pub fn eat_exact(t: TokenType) -> Parser(TokenType, r) {
   eat(fn(x) { x == t })
   |> expect(string.inspect(t))
 }
@@ -271,7 +270,12 @@ pub fn parse(
   p: Parser(a, Result(#(a, List(Token)), Message)),
   tokens: List(Token),
 ) -> Result(#(a, List(Token)), Message) {
-  let state = ParserState(tokens:, pos: 1, ignore_newline: True)
+  let start_pos = case tokens {
+    [] -> Pos(line: 1, char: 1)
+    [Token(span:, ..), ..] -> span.start
+  }
+  let state = ParserState(tokens:, pos: start_pos, ignore_newline: True)
+
   p.run(
     state,
     fn(state, x, _) { Ok(#(x, state.tokens)) },

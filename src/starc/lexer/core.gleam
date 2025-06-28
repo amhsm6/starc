@@ -1,49 +1,114 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
+
+import starc/lexer/token.{
+  type Pos, type Span, Pos, Span, advance_chars, advance_lines,
+}
 
 pub type Lexer(a, r) {
-  Lexer(run: fn(LexerState, fn(LexerState, a) -> r, fn() -> r) -> r)
+  Lexer(run: fn(LexerState, fn(LexerState, Span, a) -> r, fn() -> r) -> r)
 }
 
 pub type LexerState {
   LexerState(input: String, pos: Pos)
 }
 
-pub type Pos {
-  Pos(line: Int, char: Int)
+pub fn pure(value: a) -> Lexer(a, r) {
+  use state, succ, _ <- Lexer
+  succ(state, Span(start: state.pos, end: state.pos), value)
 }
 
-pub fn advance_chars(pos: Pos, n: Int) -> Pos {
-  let Pos(line, char) = pos
-  Pos(line, char + n)
-}
-
-pub fn advance_char(pos: Pos) -> Pos {
-  advance_chars(pos, 1)
-}
-
-pub fn advance_line(pos: Pos) -> Pos {
-  Pos(pos.line + 1, 1)
+pub fn die() -> Lexer(a, r) {
+  use _, _, fail <- Lexer
+  fail()
 }
 
 pub fn perform(l: Lexer(a, r), f: fn(a) -> Lexer(b, r)) -> Lexer(b, r) {
   use state, succ, fail <- Lexer
-  l.run(state, fn(state, x) { f(x).run(state, succ, fail) }, fail)
+
+  l.run(
+    state,
+    fn(state, span1, x) {
+      f(x).run(
+        state,
+        fn(state, span2, y) {
+          let span = Span(start: span1.start, end: span2.end)
+          succ(state, span, y)
+        },
+        fail,
+      )
+    },
+    fail,
+  )
 }
 
-pub fn pure(value: a) -> Lexer(a, r) {
-  Lexer(fn(state, succ, _) { succ(state, value) })
+pub fn map(l: Lexer(a, r), f: fn(a) -> b) -> Lexer(b, r) {
+  perform(l, fn(x) { pure(f(x)) })
 }
 
-pub fn die() -> Lexer(a, r) {
-  Lexer(fn(_, _, fail) { fail() })
+pub fn replace(l: Lexer(a, r), x: b) -> Lexer(b, r) {
+  perform(l, fn(_) { pure(x) })
+}
+
+pub fn extract_span(l: Lexer(a, r)) -> Lexer(#(a, Span), r) {
+  use state, succ, fail <- Lexer
+  l.run(state, fn(state, span, x) { succ(state, span, #(x, span)) }, fail)
+}
+
+pub fn eat(pred: fn(String) -> Bool) -> Lexer(String, r) {
+  use LexerState(input:, pos:), succ, fail <- Lexer
+
+  case string.pop_grapheme(input) {
+    Ok(#(char, input)) -> {
+      case pred(char) {
+        True -> {
+          let start_pos = pos
+          let pos = case char {
+            "\n" -> advance_lines(start_pos, 1)
+            _ -> advance_chars(start_pos, 1)
+          }
+
+          succ(LexerState(input:, pos:), Span(start: start_pos, end: pos), char)
+        }
+
+        False -> fail()
+      }
+    }
+
+    Error(_) -> fail()
+  }
+}
+
+pub fn oneof(lexers: List(Lexer(a, r))) -> Lexer(a, r) {
+  use state, succ, fail <- Lexer
+
+  let f =
+    list.fold_right(lexers, fn() { fail() }, fn(next, l) {
+      fn() { l.run(state, succ, next) }
+    })
+
+  f()
+}
+
+pub fn eat_exact(str: String) -> Lexer(Nil, r) {
+  let assert [lexer, ..lexers] =
+    string.to_graphemes(str)
+    |> list.map(fn(c) { fn(x) { x == c } })
+    |> list.map(eat)
+
+  list.fold(lexers, lexer, fn(l1, l2) { perform(l1, fn(_) { l2 }) })
+  |> map(fn(_) { Nil })
 }
 
 pub fn many(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
   use state, succ, _ <- Lexer
+  let start_pos = state.pos
 
   let #(state, xs) = many_loop(l, state, [])
-  succ(state, list.reverse(xs))
+  let end_pos = state.pos
+
+  succ(state, Span(start: start_pos, end: end_pos), list.reverse(xs))
 }
 
 fn many_loop(
@@ -51,7 +116,7 @@ fn many_loop(
   state: LexerState,
   result: List(a),
 ) -> #(LexerState, List(a)) {
-  l.run(state, fn(state, x) { many_loop(l, state, [x, ..result]) }, fn() {
+  l.run(state, fn(state, _, x) { many_loop(l, state, [x, ..result]) }, fn() {
     #(state, result)
   })
 }
@@ -68,6 +133,8 @@ pub fn lex(
   l: Lexer(a, Option(#(LexerState, a))),
   input: String,
 ) -> Option(#(LexerState, a)) {
-  let state = LexerState(input:, pos: Pos(1, 1))
-  l.run(state, fn(state, x) { Some(#(state, x)) }, fn() { None })
+  let start = Pos(line: 1, char: 1)
+  let state = LexerState(input:, pos: start)
+
+  l.run(state, fn(state, _, x) { Some(#(state, x)) }, fn() { None })
 }
