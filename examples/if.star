@@ -10,7 +10,7 @@ fn main() {
         print_int64(x)
         x = x + y
     } else {
-        print_int64(999)
+        print_int64(100)
     }
     print_int64(x)
 }

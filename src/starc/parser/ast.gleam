@@ -1,44 +1,38 @@
 import gleam/option.{type Option}
 
-pub type Identifier =
-  String
+import starc/lexer/token.{type Span}
 
-pub type TypeId {
-  TypeName(Identifier)
-  TypePointer(TypeId)
+pub type Identifier {
+  Identifier(name: String, span: Span)
+}
+
+pub type TypeIdentifier {
+  TypeName(name: String, span: Span)
+  TypePointer(typeid: TypeIdentifier, span: Span)
 }
 
 pub type UntypedProgram =
   List(UntypedDeclaration)
 
-pub type TypedProgram =
-  List(TypedDeclaration)
-
 pub type UntypedDeclaration {
   UntypedFunctionDeclaration(
-    name: Identifier,
-    parameters: List(#(Identifier, TypeId)),
-    result: Option(TypeId),
+    id: Identifier,
+    parameters: List(#(Identifier, TypeIdentifier)),
+    result: Option(TypeIdentifier),
     body: UntypedBlock,
+    span: Span,
   )
-}
-
-pub type TypedDeclaration {
-  TypedFunctionDeclaration(label: String, body: TypedBlock, reserve_bytes: Int)
 }
 
 pub type UntypedBlock =
   List(UntypedStatement)
 
-pub type TypedBlock =
-  List(TypedStatement)
-
 pub type UntypedStatement {
   UntypedReturnStatement(UntypedExpression)
   UntypedCallStatement(UntypedExpression)
   UntypedDefineStatement(
-    name: Identifier,
-    typeid: Option(TypeId),
+    id: Identifier,
+    typeid: Option(TypeIdentifier),
     expr: UntypedExpression,
   )
   UntypedAssignStatement(cell: UntypedExpression, expr: UntypedExpression)
@@ -49,6 +43,75 @@ pub type UntypedStatement {
     elseblock: Option(UntypedBlock),
   )
 }
+
+pub type UntypedExpression {
+  UntypedIntExpr(value: Int, span: Span)
+  UntypedBoolExpr(value: Bool, span: Span)
+  UntypedStringExpr(value: String, span: Span)
+  UntypedVarExpr(Identifier)
+
+  UntypedAddrOfExpr(e: UntypedExpression, span: Span)
+  UntypedDerefExpr(e: UntypedExpression, span: Span)
+
+  UntypedAddExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedSubExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedMulExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedDivExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedNegExpr(e: UntypedExpression, span: Span)
+
+  UntypedEQExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedNEQExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedLTExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedLEExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedGTExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedGEExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+
+  UntypedAndExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedOrExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
+  UntypedNotExpr(e: UntypedExpression, span: Span)
+
+  UntypedCallExpression(
+    f: UntypedExpression,
+    args: List(UntypedExpression),
+    span: Span,
+  )
+}
+
+pub fn span_of(expr: UntypedExpression) -> Span {
+  case expr {
+    UntypedAddExpr(span:, ..) -> span
+    UntypedAddrOfExpr(span:, ..) -> span
+    UntypedAndExpr(span:, ..) -> span
+    UntypedBoolExpr(span:, ..) -> span
+    UntypedCallExpression(span:, ..) -> span
+    UntypedDerefExpr(span:, ..) -> span
+    UntypedDivExpr(span:, ..) -> span
+    UntypedEQExpr(span:, ..) -> span
+    UntypedGEExpr(span:, ..) -> span
+    UntypedGTExpr(span:, ..) -> span
+    UntypedIntExpr(span:, ..) -> span
+    UntypedLEExpr(span:, ..) -> span
+    UntypedLTExpr(span:, ..) -> span
+    UntypedMulExpr(span:, ..) -> span
+    UntypedNEQExpr(span:, ..) -> span
+    UntypedNegExpr(span:, ..) -> span
+    UntypedNotExpr(span:, ..) -> span
+    UntypedOrExpr(span:, ..) -> span
+    UntypedStringExpr(span:, ..) -> span
+    UntypedSubExpr(span:, ..) -> span
+    UntypedVarExpr(id) -> id.span
+  }
+}
+
+pub type TypedProgram =
+  List(TypedDeclaration)
+
+pub type TypedDeclaration {
+  TypedFunctionDeclaration(label: String, body: TypedBlock, reserve_bytes: Int)
+}
+
+pub type TypedBlock =
+  List(TypedStatement)
 
 pub type TypedStatement {
   TypedReturnStatement(TypedExpression)
@@ -63,39 +126,10 @@ pub type TypedStatement {
   )
 }
 
-pub type UntypedExpression {
-  UntypedIntExpr(Int)
-  UntypedBoolExpr(Bool)
-  UntypedStringExpr(String)
-  UntypedVarExpr(Identifier)
-
-  UntypedAddrOfExpr(UntypedExpression)
-  UntypedDerefExpr(UntypedExpression)
-
-  UntypedAddExpr(UntypedExpression, UntypedExpression)
-  UntypedSubExpr(UntypedExpression, UntypedExpression)
-  UntypedMulExpr(UntypedExpression, UntypedExpression)
-  UntypedDivExpr(UntypedExpression, UntypedExpression)
-  UntypedNegExpr(UntypedExpression)
-
-  UntypedEQExpr(UntypedExpression, UntypedExpression)
-  UntypedNEQExpr(UntypedExpression, UntypedExpression)
-  UntypedLTExpr(UntypedExpression, UntypedExpression)
-  UntypedLEExpr(UntypedExpression, UntypedExpression)
-  UntypedGTExpr(UntypedExpression, UntypedExpression)
-  UntypedGEExpr(UntypedExpression, UntypedExpression)
-
-  UntypedAndExpr(UntypedExpression, UntypedExpression)
-  UntypedOrExpr(UntypedExpression, UntypedExpression)
-  UntypedNotExpr(UntypedExpression)
-
-  UntypedCallExpression(f: UntypedExpression, args: List(UntypedExpression))
-}
-
 pub type TypedExpression {
   TypedIntExpr(value: Int, ty: Type)
   TypedBoolExpr(Bool)
-  TypedVarExpr(id: Identifier, ty: Type, frame_offset: Int)
+  TypedVarExpr(ty: Type, frame_offset: Int)
 
   TypedAddrOfExpr(e: TypedExpression, ty: Type)
   TypedDerefExpr(e: TypedExpression, ty: Type)

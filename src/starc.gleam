@@ -11,7 +11,7 @@ import shellout
 import simplifile.{type FileError}
 
 import starc/codegen
-import starc/codegen/env.{type CodegenError}
+import starc/codegen/env.{type SemanticError}
 import starc/lexer.{type LexerError}
 import starc/parser.{type ParserError}
 import starc/serializer
@@ -24,7 +24,7 @@ type CompileError {
   FileError(FileError)
   LexerError(LexerError)
   ParserError(ParserError)
-  CodegenError(CodegenError)
+  SemanticError(SemanticError)
 }
 
 fn compile(cmd: Command) -> Result(Nil, String) {
@@ -59,7 +59,7 @@ fn compile(cmd: Command) -> Result(Nil, String) {
 
     use ir <- result.try(
       codegen.generate_program(tree)
-      |> result.map_error(CodegenError),
+      |> result.map_error(SemanticError),
     )
 
     let assembly = serializer.serialize_program(ir)
@@ -95,7 +95,7 @@ fn compile(cmd: Command) -> Result(Nil, String) {
       ParserError(parser.NotParsed(not_parsed)) ->
         "Parser error: Not parsed: " <> not_parsed
 
-      CodegenError(err) -> "Codegen error: " <> string.inspect(err)
+      SemanticError(err) -> "Codegen error: " <> string.inspect(err)
     }
   })
 }

@@ -3,6 +3,7 @@ import gleam/int
 import gleam/list
 import gleam/result
 
+import starc/lexer/token.{type Span}
 import starc/parser/ast
 
 pub type Environment {
@@ -15,10 +16,7 @@ pub type Environment {
 }
 
 pub type Frame {
-  Frame(
-    symbols: Dict(ast.Identifier, Symbol),
-    types: Dict(ast.Identifier, ast.Type),
-  )
+  Frame(symbols: Dict(String, Symbol), types: Dict(String, ast.Type))
 }
 
 pub type Symbol {
@@ -26,12 +24,20 @@ pub type Symbol {
   Variable(frame_offset: Int, ty: ast.Type)
 }
 
-pub type CodegenError {
-  UnknownType(ast.Identifier)
+pub type SemanticError {
+  UnknownType(ast.TypeIdentifier)
   UnknownSymbol(ast.Identifier)
-  DuplicateType(ast.Identifier)
+  DuplicateType(ast.TypeIdentifier)
   DuplicateSymbol(ast.Identifier)
-  TypeError(String)
+  TypeMismatch(ty1: ast.Type, span1: Span, ty2: ast.Type, span2: Span)
+  NotInteger(ty: ast.Type, span: Span)
+  FunctionAsValue(ast.Identifier)
+  AddressNotOfVariable(Span)
+  DerefNotPointer(ty: ast.Type, span: Span)
+  WrongCallExpression(Span)
+  CallNotFunction(Span)
+  CallArgumentCountMismatch(expected: Int, actual: Int, span: Span)
+  MissingReturn(ty: ast.Type, span: Span)
 }
 
 pub fn builtin() -> Frame {
@@ -120,23 +126,25 @@ pub fn insert_symbol(
   sym: Symbol,
 ) -> Environment {
   let assert [frame, ..rest] = env.frames
-  let symbols = dict.insert(frame.symbols, id, sym)
+  let symbols = dict.insert(frame.symbols, id.name, sym)
   let frame = Frame(..frame, symbols:)
   Environment(..env, frames: [frame, ..rest])
 }
 
 pub fn resolve_type(
   env: Environment,
-  typeid: ast.TypeId,
-) -> Result(ast.Type, CodegenError) {
-  let resolve_type_name = fn(id) {
-    list.find_map(env.frames, fn(f) { dict.get(f.types, id) })
-    |> result.replace_error(UnknownType(id))
+  typeid: ast.TypeIdentifier,
+) -> Result(ast.Type, SemanticError) {
+  let resolve_type_name = fn(typeid) {
+    let assert ast.TypeName(name:, ..) = typeid
+
+    list.find_map(env.frames, fn(f) { dict.get(f.types, name) })
+    |> result.replace_error(UnknownType(typeid))
   }
 
   case typeid {
-    ast.TypeName(id) -> resolve_type_name(id)
-    ast.TypePointer(typeid) ->
+    ast.TypeName(..) -> resolve_type_name(typeid)
+    ast.TypePointer(typeid, ..) ->
       resolve_type(env, typeid) |> result.map(ast.Pointer)
   }
 }
@@ -144,16 +152,16 @@ pub fn resolve_type(
 pub fn resolve_symbol(
   env: Environment,
   id: ast.Identifier,
-) -> Result(Symbol, CodegenError) {
-  list.find_map(env.frames, fn(f) { dict.get(f.symbols, id) })
+) -> Result(Symbol, SemanticError) {
+  list.find_map(env.frames, fn(f) { dict.get(f.symbols, id.name) })
   |> result.replace_error(UnknownSymbol(id))
 }
 
 pub fn assert_unique_symbol(
   env: Environment,
   id: ast.Identifier,
-) -> Result(Nil, CodegenError) {
-  case list.find(env.frames, fn(f) { dict.has_key(f.symbols, id) }) {
+) -> Result(Nil, SemanticError) {
+  case list.find(env.frames, fn(f) { dict.has_key(f.symbols, id.name) }) {
     Ok(_) -> Error(DuplicateSymbol(id))
     Error(_) -> Ok(Nil)
   }
@@ -161,17 +169,19 @@ pub fn assert_unique_symbol(
 
 pub fn assert_unique_type(
   env: Environment,
-  typeid: ast.TypeId,
-) -> Result(Nil, CodegenError) {
-  let assert_unique_type_name = fn(id) {
-    case list.find(env.frames, fn(f) { dict.has_key(f.types, id) }) {
-      Ok(_) -> Error(DuplicateType(id))
+  typeid: ast.TypeIdentifier,
+) -> Result(Nil, SemanticError) {
+  let assert_unique_type_name = fn(typeid) {
+    let assert ast.TypeName(name:, ..) = typeid
+
+    case list.find(env.frames, fn(f) { dict.has_key(f.types, name) }) {
+      Ok(_) -> Error(DuplicateType(typeid))
       Error(_) -> Ok(Nil)
     }
   }
 
   case typeid {
-    ast.TypeName(id) -> assert_unique_type_name(id)
-    ast.TypePointer(typeid) -> assert_unique_type(env, typeid)
+    ast.TypeName(..) -> assert_unique_type_name(typeid)
+    ast.TypePointer(typeid, ..) -> assert_unique_type(env, typeid)
   }
 }

@@ -132,7 +132,7 @@ pub fn eat_newlines(p: Parser(a, r)) -> Parser(a, r) {
   )
 }
 
-pub fn eat(pred: fn(TokenType) -> Bool) -> Parser(TokenType, r) {
+pub fn eat(pred: fn(TokenType) -> Bool) -> Parser(Token, r) {
   use
     ParserState(tokens:, pos:, ignore_newline:),
     _,
@@ -159,7 +159,7 @@ pub fn eat(pred: fn(TokenType) -> Bool) -> Parser(TokenType, r) {
         True ->
           ok_consumed(
             ParserState(tokens: ts, pos: t.span.end, ignore_newline:),
-            t.token_type,
+            t,
             Message(pos, "", []),
           )
 
@@ -261,7 +261,7 @@ pub fn sep_by(p: Parser(a, r), sep: Parser(b, r)) {
   )
 }
 
-pub fn eat_exact(t: TokenType) -> Parser(TokenType, r) {
+pub fn eat_exact(t: TokenType) -> Parser(Token, r) {
   eat(fn(x) { x == t })
   |> expect(string.inspect(t))
 }

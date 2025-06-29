@@ -5,7 +5,7 @@ import starc/analyzer
 import starc/codegen/core.{
   type Generator, emit, generate, generate_label, perform, pure, traverse,
 }
-import starc/codegen/env.{type CodegenError}
+import starc/codegen/env.{type SemanticError}
 import starc/codegen/ir
 import starc/parser/ast
 
@@ -17,12 +17,12 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     ast.TypedBoolExpr(True) -> pure(ir.Immediate(value: 1, size: 1))
     ast.TypedBoolExpr(False) -> pure(ir.Immediate(value: 0, size: 1))
 
-    ast.TypedVarExpr(ty:, frame_offset:, ..) ->
+    ast.TypedVarExpr(ty:, frame_offset:) ->
       pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
 
     ast.TypedAddrOfExpr(e:, ..) -> {
       case e {
-        ast.TypedVarExpr(ty:, frame_offset:, ..) -> {
+        ast.TypedVarExpr(ty:, frame_offset:) -> {
           let size = ast.size_of(ty)
           use _ <- perform(
             emit([
@@ -418,7 +418,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
   case statement {
     ast.TypedAssignStatement(cell:, expr:) -> {
       case cell {
-        ast.TypedVarExpr(ty:, frame_offset:, ..) -> {
+        ast.TypedVarExpr(ty:, frame_offset:) -> {
           use expr <- perform(generate_expression(expr))
           emit([
             ir.Move(
@@ -454,7 +454,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
     }
 
     ast.TypedDefineStatement(name:, expr:) -> {
-      let assert ast.TypedVarExpr(ty:, frame_offset:, ..) = name
+      let assert ast.TypedVarExpr(ty:, frame_offset:) = name
 
       use expr <- perform(generate_expression(expr))
       emit([
@@ -542,7 +542,7 @@ fn generate_function(declaration: ast.TypedDeclaration) -> Generator(Nil, r) {
 
 pub fn generate_program(
   program: ast.UntypedProgram,
-) -> Result(ir.Program, CodegenError) {
+) -> Result(ir.Program, SemanticError) {
   let g = {
     use tree <- perform(analyzer.analyze_program(program))
     traverse(tree, generate_function)

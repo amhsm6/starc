@@ -1,7 +1,6 @@
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/pair
-import gleam/string
 
 import starc/codegen/core.{
   type Generator, add_frame_offset, assert_unique_symbol, die, get_frame_offset,
@@ -10,8 +9,9 @@ import starc/codegen/core.{
   sub_frame_offset, traverse, traverse_until_return,
 }
 import starc/codegen/env.{
-  type CodegenError, type Environment, Function, TypeError, Variable,
+  type Environment, type SemanticError, Function, Variable,
 }
+import starc/lexer/token.{type Span}
 import starc/parser/ast
 
 fn typify_constants(
@@ -19,24 +19,28 @@ fn typify_constants(
   ty: ast.Type,
 ) -> Generator(ast.TypedExpression, r) {
   case expr {
-    ast.TypedIntExpr(value:, ..) -> pure(ast.TypedIntExpr(value:, ty:))
+    ast.TypedIntExpr(value:, ty: ast.IntConst) ->
+      pure(ast.TypedIntExpr(value:, ty:))
 
-    ast.TypedAddExpr(e1, e2, ty: ast.IntConst) -> {
+    ast.TypedAddExpr(e1:, e2:, ty: ast.IntConst) -> {
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedAddExpr(e1:, e2:, ty:))
     }
-    ast.TypedSubExpr(e1, e2, ty: ast.IntConst) -> {
+
+    ast.TypedSubExpr(e1:, e2:, ty: ast.IntConst) -> {
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedSubExpr(e1:, e2:, ty:))
     }
-    ast.TypedMulExpr(e1, e2, ty: ast.IntConst) -> {
+
+    ast.TypedMulExpr(e1:, e2:, ty: ast.IntConst) -> {
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedMulExpr(e1:, e2:, ty:))
     }
-    ast.TypedDivExpr(e1, e2, ty: ast.IntConst) -> {
+
+    ast.TypedDivExpr(e1:, e2:, ty: ast.IntConst) -> {
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedDivExpr(e1:, e2:, ty:))
@@ -46,9 +50,15 @@ fn typify_constants(
   }
 }
 
-fn unify(ty1: ast.Type, ty2: ast.Type) -> Generator(ast.Type, r) {
+fn unify(
+  ty1: ast.Type,
+  span1: Span,
+  ty2: ast.Type,
+  span2: Span,
+) -> Generator(ast.Type, r) {
   case ty1, ty2 {
-    ast.Void, _ | _, ast.Void -> die(TypeError("Cannot unify void type"))
+    ast.Void, _ | _, ast.Void ->
+      die(env.TypeMismatch(ty1:, span1:, ty2:, span2:))
 
     ast.Bool, ast.Bool -> pure(ast.Bool)
 
@@ -57,21 +67,31 @@ fn unify(ty1: ast.Type, ty2: ast.Type) -> Generator(ast.Type, r) {
     ast.Int32, ast.Int32 -> pure(ast.Int32)
     ast.Int64, ast.Int64 -> pure(ast.Int64)
 
-    ast.IntConst, ty -> pure(ty)
-    ty, ast.IntConst -> pure(ty)
+    ast.IntConst, ast.Int8 -> pure(ast.Int8)
+    ast.IntConst, ast.Int16 -> pure(ast.Int16)
+    ast.IntConst, ast.Int32 -> pure(ast.Int32)
+    ast.IntConst, ast.Int64 -> pure(ast.Int64)
+
+    ast.Int8, ast.IntConst -> pure(ast.Int8)
+    ast.Int16, ast.IntConst -> pure(ast.Int16)
+    ast.Int32, ast.IntConst -> pure(ast.Int32)
+    ast.Int64, ast.IntConst -> pure(ast.Int64)
+
+    ast.IntConst, ast.IntConst -> pure(ast.IntConst)
 
     ast.Pointer(ty1), ast.Pointer(ty2) -> {
-      use ty <- perform(unify(ty1, ty2))
+      use ty <- perform(unify(ty1, span1, ty2, span2))
       pure(ast.Pointer(ty))
     }
 
-    ty1, ty2 ->
-      die(TypeError(
-        "Cannot unify "
-        <> string.inspect(ty1)
-        <> " with "
-        <> string.inspect(ty2),
-      ))
+    _, _ -> die(env.TypeMismatch(ty1:, span1:, ty2:, span2:))
+  }
+}
+
+fn expect_int(ty: ast.Type, span: Span) -> Generator(Nil, r) {
+  case ty {
+    ast.Int8 | ast.Int16 | ast.Int32 | ast.Int64 | ast.IntConst -> pure(Nil)
+    _ -> die(env.NotInteger(ty:, span:))
   }
 }
 
@@ -79,61 +99,83 @@ fn analyze_expression(
   expression: ast.UntypedExpression,
 ) -> Generator(ast.TypedExpression, r) {
   case expression {
-    ast.UntypedIntExpr(x) -> pure(ast.TypedIntExpr(value: x, ty: ast.IntConst))
+    ast.UntypedIntExpr(value:, ..) ->
+      pure(ast.TypedIntExpr(value:, ty: ast.IntConst))
 
-    ast.UntypedBoolExpr(x) -> pure(ast.TypedBoolExpr(x))
+    ast.UntypedBoolExpr(value:, ..) -> pure(ast.TypedBoolExpr(value))
 
-    ast.UntypedStringExpr(_) -> todo
+    ast.UntypedStringExpr(..) -> todo
 
     ast.UntypedVarExpr(id) -> {
       use sym <- perform(resolve_symbol(id))
       case sym {
-        Function(..) -> die(TypeError("Functions cannot be values"))
+        Function(..) -> die(env.FunctionAsValue(id))
 
         Variable(frame_offset:, ty:) ->
-          pure(ast.TypedVarExpr(id:, ty:, frame_offset:))
+          pure(ast.TypedVarExpr(ty:, frame_offset:))
       }
     }
 
     //TODO: address of other things
-    ast.UntypedAddrOfExpr(e) -> {
+    ast.UntypedAddrOfExpr(e:, ..) -> {
+      let span = ast.span_of(e)
       use e <- perform(analyze_expression(e))
       case e {
         ast.TypedVarExpr(ty:, ..) ->
           pure(ast.TypedAddrOfExpr(e:, ty: ast.Pointer(ty)))
 
-        _ -> die(TypeError("Can only take address of a variable"))
+        _ -> die(env.AddressNotOfVariable(span))
       }
     }
 
-    ast.UntypedDerefExpr(e) -> {
+    ast.UntypedDerefExpr(e:, ..) -> {
+      let span = ast.span_of(e)
       use e <- perform(analyze_expression(e))
       case ast.type_of(e) {
         ast.Pointer(ty) -> pure(ast.TypedDerefExpr(e:, ty:))
 
-        _ -> die(TypeError("Can only deref a pointer"))
+        ty -> die(env.DerefNotPointer(ty:, span:))
       }
     }
 
     // TODO: call any function pointer, pass the address instead of the label
-    ast.UntypedCallExpression(f:, args:) -> {
+    ast.UntypedCallExpression(f:, args:, span:) -> {
       case f {
         ast.UntypedVarExpr(id) -> {
           use sym <- perform(resolve_symbol(id))
           case sym {
             Function(label:, arg_types:, return_type:) -> {
-              use args <- perform(traverse(args, analyze_expression))
+              let expected_count = list.length(arg_types)
+              let actual_count = list.length(args)
 
-              use args <- perform(case list.strict_zip(args, arg_types) {
-                Ok(pairs) ->
-                  traverse(pairs, fn(pair) {
-                    let #(arg, arg_ty) = pair
-                    use ty <- perform(unify(ast.type_of(arg), arg_ty))
-                    typify_constants(arg, ty)
-                  })
+              use _ <- perform(case expected_count == actual_count {
+                True -> pure(Nil)
 
-                Error(_) -> die(TypeError("Argument count mismatch"))
+                False ->
+                  die(env.CallArgumentCountMismatch(
+                    expected: expected_count,
+                    actual: actual_count,
+                    span:,
+                  ))
               })
+
+              use args <- perform(
+                traverse(list.zip(args, arg_types), fn(x) {
+                  let #(arg, arg_ty) = x
+
+                  let arg_span = ast.span_of(arg)
+                  use arg <- perform(analyze_expression(arg))
+
+                  use ty <- perform(unify(
+                    // FIXME: span with itself
+                    ast.type_of(arg),
+                    arg_span,
+                    arg_ty,
+                    arg_span,
+                  ))
+                  typify_constants(arg, ty)
+                }),
+              )
 
               use _ <- perform(sub_frame_offset(ast.size_of(return_type)))
               use frame_offset <- perform(get_frame_offset())
@@ -146,78 +188,120 @@ fn analyze_expression(
               ))
             }
 
-            _ -> die(TypeError("Can only call a function"))
+            _ -> die(env.CallNotFunction(id.span))
           }
         }
 
-        _ ->
-          die(TypeError("Can only call a function by its identifier FIXME??"))
+        _ -> die(env.WrongCallExpression(ast.span_of(f)))
       }
     }
 
-    ast.UntypedAddExpr(e1, e2) -> {
+    // FIXME: can add everything
+    ast.UntypedAddExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedAddExpr(e1:, e2:, ty:))
     }
 
-    ast.UntypedSubExpr(e1, e2) -> {
+    ast.UntypedSubExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedSubExpr(e1:, e2:, ty:))
     }
 
-    ast.UntypedMulExpr(e1, e2) -> {
+    ast.UntypedMulExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedMulExpr(e1:, e2:, ty:))
     }
 
-    ast.UntypedDivExpr(e1, e2) -> {
+    ast.UntypedDivExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
+
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedDivExpr(e1:, e2:, ty:))
     }
 
-    ast.UntypedNegExpr(expr) -> {
-      use expr <- perform(analyze_expression(expr))
-      case expr {
+    ast.UntypedNegExpr(e:, ..) -> {
+      let span = ast.span_of(e)
+      use e <- perform(analyze_expression(e))
+      let ty = ast.type_of(e)
+
+      use _ <- perform(expect_int(ty, span))
+
+      case e {
         ast.TypedIntExpr(value:, ..) ->
           pure(ast.TypedIntExpr(value: -value, ty: ast.IntConst))
 
-        _ -> {
-          let ty = ast.type_of(expr)
-          case ty {
-            ast.Int8 | ast.Int16 | ast.Int32 | ast.Int64 ->
-              pure(ast.TypedNegExpr(e: expr, ty:))
-
-            _ -> die(TypeError("Cannot negate " <> string.inspect(ty)))
-          }
-        }
+        _ -> pure(ast.TypedNegExpr(e:, ty:))
       }
     }
 
-    ast.UntypedEQExpr(e1, e2) -> {
+    ast.UntypedEQExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -225,14 +309,20 @@ fn analyze_expression(
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedEQExpr(e1:, e2:))
     }
 
-    ast.UntypedNEQExpr(e1, e2) -> {
+    ast.UntypedNEQExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -240,14 +330,23 @@ fn analyze_expression(
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedNEQExpr(e1:, e2:))
     }
 
-    ast.UntypedLTExpr(e1, e2) -> {
+    ast.UntypedGTExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -255,44 +354,23 @@ fn analyze_expression(
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
-      pure(ast.TypedLTExpr(e1:, e2:))
-    }
 
-    ast.UntypedLEExpr(e1, e2) -> {
-      use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
-
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
-      let ty = case ty {
-        ast.IntConst -> ast.Int64
-        _ -> ty
-      }
-
-      use e1 <- perform(typify_constants(e1, ty))
-      use e2 <- perform(typify_constants(e2, ty))
-      pure(ast.TypedLEExpr(e1:, e2:))
-    }
-
-    ast.UntypedGTExpr(e1, e2) -> {
-      use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
-
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
-      let ty = case ty {
-        ast.IntConst -> ast.Int64
-        _ -> ty
-      }
-
-      use e1 <- perform(typify_constants(e1, ty))
-      use e2 <- perform(typify_constants(e2, ty))
       pure(ast.TypedGTExpr(e1:, e2:))
     }
 
-    ast.UntypedGEExpr(e1, e2) -> {
+    ast.UntypedGEExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
-      use e2 <- perform(analyze_expression(e2))
+      let ty1 = ast.type_of(e1)
 
-      use ty <- perform(unify(ast.type_of(e1), ast.type_of(e2)))
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -300,36 +378,94 @@ fn analyze_expression(
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
+
       pure(ast.TypedGEExpr(e1:, e2:))
     }
 
-    ast.UntypedAndExpr(e1, e2) -> {
+    ast.UntypedLEExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
+      let ty1 = ast.type_of(e1)
+
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
+      use e1 <- perform(typify_constants(e1, ty))
+      use e2 <- perform(typify_constants(e2, ty))
+
+      pure(ast.TypedLEExpr(e1:, e2:))
+    }
+
+    ast.UntypedLTExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
+      use e1 <- perform(analyze_expression(e1))
+      let ty1 = ast.type_of(e1)
+
+      let span2 = ast.span_of(e2)
+      use e2 <- perform(analyze_expression(e2))
+      let ty2 = ast.type_of(e2)
+
+      use _ <- perform(expect_int(ty1, span1))
+      use _ <- perform(expect_int(ty2, span2))
+
+      use ty <- perform(unify(ty1, span1, ty2, span2))
+      let ty = case ty {
+        ast.IntConst -> ast.Int64
+        _ -> ty
+      }
+
+      use e1 <- perform(typify_constants(e1, ty))
+      use e2 <- perform(typify_constants(e2, ty))
+
+      pure(ast.TypedLTExpr(e1:, e2:))
+    }
+
+    ast.UntypedAndExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
+      use e1 <- perform(analyze_expression(e1))
+
+      let span2 = ast.span_of(e2)
       use e2 <- perform(analyze_expression(e2))
 
-      use _ <- perform(unify(ast.type_of(e1), ast.Bool))
-      use _ <- perform(unify(ast.type_of(e2), ast.Bool))
+      use _ <- perform(unify(ast.type_of(e1), span1, ast.Bool, span1))
+      //FIXME: span with itself
+      use _ <- perform(unify(ast.type_of(e2), span2, ast.Bool, span2))
 
       pure(ast.TypedAndExpr(e1:, e2:))
     }
 
-    ast.UntypedOrExpr(e1, e2) -> {
+    ast.UntypedOrExpr(e1:, e2:, ..) -> {
+      let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
+
+      let span2 = ast.span_of(e2)
       use e2 <- perform(analyze_expression(e2))
 
-      use _ <- perform(unify(ast.type_of(e1), ast.Bool))
-      use _ <- perform(unify(ast.type_of(e2), ast.Bool))
+      use _ <- perform(unify(ast.type_of(e1), span1, ast.Bool, span1))
+      //FIXME: span with itself
+      use _ <- perform(unify(ast.type_of(e2), span2, ast.Bool, span2))
 
       pure(ast.TypedOrExpr(e1:, e2:))
     }
 
-    ast.UntypedNotExpr(e) -> {
+    ast.UntypedNotExpr(e, ..) -> {
+      let span = ast.span_of(e)
       use e <- perform(analyze_expression(e))
       case e {
         ast.TypedBoolExpr(x) -> pure(ast.TypedBoolExpr(!x))
 
         _ -> {
-          use _ <- perform(unify(ast.type_of(e), ast.Bool))
+          use _ <- perform(unify(ast.type_of(e), span, ast.Bool, span))
           pure(ast.TypedNotExpr(e))
         }
       }
@@ -342,7 +478,7 @@ fn specialized_analyze_statement(
   statement: ast.UntypedStatement,
 ) -> Generator(
   ast.TypedStatement,
-  Result(#(Environment, List(b), Bool), CodegenError),
+  Result(#(Environment, List(b), Bool), SemanticError),
 ) {
   analyze_statement(statement)
 }
@@ -352,10 +488,18 @@ fn analyze_statement(
 ) -> Generator(ast.TypedStatement, r) {
   case statement {
     ast.UntypedAssignStatement(cell:, expr:) -> {
+      let cell_span = ast.span_of(cell)
       use cell <- perform(analyze_expression(cell))
+
+      let expr_span = ast.span_of(expr)
       use expr <- perform(analyze_expression(expr))
 
-      use ty <- perform(unify(ast.type_of(cell), ast.type_of(expr)))
+      use ty <- perform(unify(
+        ast.type_of(cell),
+        cell_span,
+        ast.type_of(expr),
+        expr_span,
+      ))
       use expr <- perform(typify_constants(expr, ty))
       pure(ast.TypedAssignStatement(cell:, expr:))
     }
@@ -365,16 +509,22 @@ fn analyze_statement(
       pure(ast.TypedCallStatement(expr))
     }
 
-    ast.UntypedDefineStatement(name:, typeid:, expr:) -> {
+    ast.UntypedDefineStatement(id:, typeid:, expr:) -> {
+      let expr_span = ast.span_of(expr)
       use expr <- perform(analyze_expression(expr))
-      let expr_ty = ast.type_of(expr)
 
       use expr <- perform(case typeid {
         None -> typify_constants(expr, ast.Int64)
 
         Some(typeid) -> {
           use define_ty <- perform(resolve_type(typeid))
-          use ty <- perform(unify(define_ty, expr_ty))
+
+          use ty <- perform(unify(
+            define_ty,
+            typeid.span,
+            ast.type_of(expr),
+            expr_span,
+          ))
           typify_constants(expr, ty)
         }
       })
@@ -383,17 +533,24 @@ fn analyze_statement(
       use _ <- perform(sub_frame_offset(ast.size_of(ty)))
       use frame_offset <- perform(get_frame_offset())
 
-      use _ <- perform(insert_symbol(name, Variable(frame_offset:, ty:)))
+      use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
 
       pure(ast.TypedDefineStatement(
-        name: ast.TypedVarExpr(id: name, ty:, frame_offset:),
+        name: ast.TypedVarExpr(ty:, frame_offset:),
         expr:,
       ))
     }
 
     ast.UntypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
+      let condition_span = ast.span_of(condition)
+
       use condition <- perform(analyze_expression(condition))
-      use _ <- perform(unify(ast.type_of(condition), ast.Bool))
+      use _ <- perform(unify(
+        ast.type_of(condition),
+        condition_span,
+        ast.Bool,
+        condition_span,
+      ))
 
       use _ <- perform(push_frame())
       use #(block, if_return_found) <- perform(traverse_until_return(
@@ -406,8 +563,15 @@ fn analyze_statement(
         traverse(elseifs, fn(x) {
           let #(condition, block) = x
 
+          let condition_span = ast.span_of(condition)
+
           use condition <- perform(analyze_expression(condition))
-          use _ <- perform(unify(ast.type_of(condition), ast.Bool))
+          use _ <- perform(unify(
+            ast.type_of(condition),
+            condition_span,
+            ast.Bool,
+            condition_span,
+          ))
 
           use _ <- perform(push_frame())
           use #(block, return_found) <- perform(traverse_until_return(
@@ -456,10 +620,17 @@ fn analyze_statement(
     }
 
     ast.UntypedReturnStatement(expr) -> {
+      let expr_span = ast.span_of(expr)
       use expr <- perform(analyze_expression(expr))
 
       use return_type <- perform(get_return_type())
-      use ty <- perform(unify(return_type, ast.type_of(expr)))
+      use ty <- perform(unify(
+        return_type,
+        expr_span,
+        ast.type_of(expr),
+        expr_span,
+      ))
+      //FIXME: span with itself
 
       use expr <- perform(typify_constants(expr, ty))
       return_found(ast.TypedReturnStatement(expr))
@@ -472,8 +643,8 @@ fn analyze_declaration(
   declaration: ast.UntypedDeclaration,
 ) -> Generator(ast.TypedDeclaration, r) {
   case declaration {
-    ast.UntypedFunctionDeclaration(name:, parameters:, result:, body:) -> {
-      use _ <- perform(assert_unique_symbol(name))
+    ast.UntypedFunctionDeclaration(id:, parameters:, result:, body:, span:) -> {
+      use _ <- perform(assert_unique_symbol(id))
 
       use args <- perform(
         traverse(parameters, fn(x) {
@@ -489,9 +660,9 @@ fn analyze_declaration(
       })
 
       use _ <- perform(insert_symbol(
-        name,
+        id,
         Function(
-          label: name,
+          label: id.name,
           arg_types: list.map(args, pair.second),
           return_type:,
         ),
@@ -519,9 +690,10 @@ fn analyze_declaration(
         body,
         specialized_analyze_statement,
       ))
+
       use _ <- perform(case return_type, return_found {
         ast.Void, _ | _, True -> pure(Nil)
-        _, False -> die(TypeError("Function must return"))
+        _, False -> die(env.MissingReturn(ty: return_type, span:))
       })
 
       use frame_offset <- perform(get_frame_offset())
@@ -529,7 +701,7 @@ fn analyze_declaration(
       use _ <- perform(pop_frame())
 
       pure(ast.TypedFunctionDeclaration(
-        label: name,
+        label: id.name,
         body:,
         reserve_bytes: -frame_offset,
       ))

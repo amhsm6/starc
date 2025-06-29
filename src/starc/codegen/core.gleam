@@ -1,7 +1,7 @@
 import gleam/list
 
 import starc/codegen/env.{
-  type CodegenError, type Environment, type Symbol, Environment,
+  type Environment, type SemanticError, type Symbol, Environment,
 }
 import starc/codegen/ir
 import starc/parser/ast
@@ -12,7 +12,7 @@ pub type Generator(a, r) {
       Environment,
       fn(Environment, List(ir.Statement), a) -> r,
       fn(Environment, a) -> r,
-      fn(CodegenError) -> r,
+      fn(SemanticError) -> r,
     ) ->
       r,
   )
@@ -23,7 +23,7 @@ pub fn pure(x: a) -> Generator(a, r) {
   succ(env, [], x)
 }
 
-pub fn die(err: CodegenError) -> Generator(a, r) {
+pub fn die(err: SemanticError) -> Generator(a, r) {
   use _, _, _, fail <- Generator
   fail(err)
 }
@@ -87,7 +87,7 @@ pub fn traverse(
 
 pub fn traverse_until_return(
   list: List(a),
-  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), CodegenError)),
+  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), SemanticError)),
 ) -> Generator(#(List(b), Bool), r) {
   use env, succ, _, fail <- Generator
 
@@ -99,10 +99,10 @@ pub fn traverse_until_return(
 
 fn traverse_until_return_loop(
   list: List(a),
-  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), CodegenError)),
+  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), SemanticError)),
   env: Environment,
   result: List(b),
-) -> Result(#(Environment, List(b), Bool), CodegenError) {
+) -> Result(#(Environment, List(b), Bool), SemanticError) {
   case list {
     [x, ..xs] ->
       f(x).run(
@@ -117,8 +117,8 @@ fn traverse_until_return_loop(
 }
 
 pub fn generate(
-  gen: Generator(a, Result(List(ir.Statement), CodegenError)),
-) -> Result(List(ir.Statement), CodegenError) {
+  gen: Generator(a, Result(List(ir.Statement), SemanticError)),
+) -> Result(List(ir.Statement), SemanticError) {
   let env =
     Environment(
       frames: [env.builtin()],
@@ -183,9 +183,9 @@ pub fn insert_symbol(id: ast.Identifier, sym: Symbol) -> Generator(Nil, r) {
   set(env.insert_symbol(env, id, sym))
 }
 
-pub fn resolve_type(id: ast.TypeId) -> Generator(ast.Type, r) {
+pub fn resolve_type(typeid: ast.TypeIdentifier) -> Generator(ast.Type, r) {
   use env <- perform(get())
-  case env.resolve_type(env, id) {
+  case env.resolve_type(env, typeid) {
     Ok(ty) -> pure(ty)
     Error(err) -> die(err)
   }
@@ -207,9 +207,9 @@ pub fn assert_unique_symbol(id: ast.Identifier) -> Generator(Nil, r) {
   }
 }
 
-pub fn assert_unique_type(id: ast.TypeId) -> Generator(Nil, r) {
+pub fn assert_unique_type(typeid: ast.TypeIdentifier) -> Generator(Nil, r) {
   use env <- perform(get())
-  case env.assert_unique_type(env, id) {
+  case env.assert_unique_type(env, typeid) {
     Ok(_) -> pure(Nil)
     Error(err) -> die(err)
   }

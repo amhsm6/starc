@@ -3,7 +3,7 @@ import gleam/option.{None, Some}
 import gleam/pair
 import gleam/string
 
-import starc/lexer/token
+import starc/lexer/token.{Span}
 import starc/parser/ast
 import starc/parser/core.{
   type Message, type Parser, block_newline, die, eat, eat_exact, eat_newlines,
@@ -29,17 +29,24 @@ fn parse_ident() -> Parser(ast.Identifier, r) {
     |> expect("identifier"),
   )
 
-  let assert token.TokenIdent(id) = t
-  pure(id)
+  let assert token.TokenIdent(name) = t.token_type
+  pure(ast.Identifier(name:, span: t.span))
 }
 
-fn parse_typeid() -> Parser(ast.TypeId, r) {
+fn parse_typeid() -> Parser(ast.TypeIdentifier, r) {
   use ptr <- perform(maybe(eat_exact(token.TokenStar)))
   case ptr {
-    None -> parse_ident() |> expect("type") |> map(ast.TypeName)
-    Some(_) -> {
-      parse_typeid()
-      |> map(ast.TypePointer)
+    None ->
+      parse_ident()
+      |> expect("type")
+      |> map(fn(id) { ast.TypeName(name: id.name, span: id.span) })
+
+    Some(token) -> {
+      use typeid <- perform(parse_typeid())
+      pure(ast.TypePointer(
+        typeid:,
+        span: Span(start: token.span.start, end: typeid.span.end),
+      ))
     }
   }
 }
@@ -71,8 +78,14 @@ fn parse_logical_or_expression() -> Parser(ast.UntypedExpression, r) {
   pure(
     list.fold(next, expr, fn(e1, x) {
       let #(token, e2) = x
-      case token {
-        token.TokenDoubleBar -> ast.UntypedOrExpr(e1, e2)
+      case token.token_type {
+        token.TokenDoubleBar ->
+          ast.UntypedOrExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
         _ -> panic
       }
     }),
@@ -100,8 +113,14 @@ fn parse_logical_and_expression() -> Parser(ast.UntypedExpression, r) {
   pure(
     list.fold(next, expr, fn(e1, x) {
       let #(token, e2) = x
-      case token {
-        token.TokenDoubleAmpersand -> ast.UntypedAndExpr(e1, e2)
+      case token.token_type {
+        token.TokenDoubleAmpersand ->
+          ast.UntypedAndExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
         _ -> panic
       }
     }),
@@ -134,13 +153,49 @@ fn parse_comparable_expression() -> Parser(ast.UntypedExpression, r) {
   pure(
     list.fold(next, expr, fn(e1, x) {
       let #(token, e2) = x
-      case token {
-        token.TokenEquals -> ast.UntypedEQExpr(e1, e2)
-        token.TokenNotEquals -> ast.UntypedNEQExpr(e1, e2)
-        token.TokenLT -> ast.UntypedLTExpr(e1, e2)
-        token.TokenLE -> ast.UntypedLEExpr(e1, e2)
-        token.TokenGT -> ast.UntypedGTExpr(e1, e2)
-        token.TokenGE -> ast.UntypedGEExpr(e1, e2)
+      case token.token_type {
+        token.TokenEquals ->
+          ast.UntypedEQExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenNotEquals ->
+          ast.UntypedNEQExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenLT ->
+          ast.UntypedLTExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenLE ->
+          ast.UntypedLEExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenGT ->
+          ast.UntypedGTExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenGE ->
+          ast.UntypedGEExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
         _ -> panic
       }
     }),
@@ -169,9 +224,21 @@ fn parse_additive_expression() -> Parser(ast.UntypedExpression, r) {
   pure(
     list.fold(next, expr, fn(e1, item) {
       let #(token, e2) = item
-      case token {
-        token.TokenPlus -> ast.UntypedAddExpr(e1, e2)
-        token.TokenMinus -> ast.UntypedSubExpr(e1, e2)
+      case token.token_type {
+        token.TokenPlus ->
+          ast.UntypedAddExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenMinus ->
+          ast.UntypedSubExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
         _ -> panic
       }
     }),
@@ -200,9 +267,21 @@ fn parse_multiplicative_expression() -> Parser(ast.UntypedExpression, r) {
   pure(
     list.fold(next, expr, fn(e1, item) {
       let #(token, e2) = item
-      case token {
-        token.TokenStar -> ast.UntypedMulExpr(e1, e2)
-        token.TokenSlash -> ast.UntypedDivExpr(e1, e2)
+      case token.token_type {
+        token.TokenStar ->
+          ast.UntypedMulExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
+        token.TokenSlash ->
+          ast.UntypedDivExpr(
+            e1:,
+            e2:,
+            span: Span(start: ast.span_of(e1).start, end: ast.span_of(e2).end),
+          )
+
         _ -> panic
       }
     }),
@@ -232,12 +311,18 @@ fn parse_call_expression() -> Parser(ast.UntypedExpression, r) {
       pure(function)
     }),
   )
+
   use args <- perform(
     ignore_newline(sep_by(parse_expression(), eat_exact(token.TokenComma))),
   )
+
   eat_newlines({
-    use _ <- perform(eat_exact(token.TokenRParen))
-    pure(ast.UntypedCallExpression(f: function, args:))
+    use token <- perform(eat_exact(token.TokenRParen))
+    pure(ast.UntypedCallExpression(
+      f: function,
+      args:,
+      span: Span(start: ast.span_of(function).start, end: token.span.end),
+    ))
   })
 }
 
@@ -251,27 +336,39 @@ fn parse_nested_expression() -> Parser(ast.UntypedExpression, r) {
 }
 
 fn parse_not_expression() -> Parser(ast.UntypedExpression, r) {
-  use _ <- perform(eat_exact(token.TokenBang))
+  use token <- perform(eat_exact(token.TokenBang))
   use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedNotExpr(expr))
+  pure(ast.UntypedNotExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
 }
 
 fn parse_addrof_expression() -> Parser(ast.UntypedExpression, r) {
-  use _ <- perform(eat_exact(token.TokenAmpersand))
+  use token <- perform(eat_exact(token.TokenAmpersand))
   use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedAddrOfExpr(expr))
+  pure(ast.UntypedAddrOfExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
 }
 
 fn parse_deref_expression() -> Parser(ast.UntypedExpression, r) {
-  use _ <- perform(eat_exact(token.TokenStar))
+  use token <- perform(eat_exact(token.TokenStar))
   use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedDerefExpr(expr))
+  pure(ast.UntypedDerefExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
 }
 
 fn parse_neg_expression() -> Parser(ast.UntypedExpression, r) {
-  use _ <- perform(eat_exact(token.TokenMinus))
+  use token <- perform(eat_exact(token.TokenMinus))
   use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedNegExpr(expr))
+  pure(ast.UntypedNegExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
 }
 
 fn parse_var_expression() -> Parser(ast.UntypedExpression, r) {
@@ -290,8 +387,8 @@ fn parse_int() -> Parser(ast.UntypedExpression, r) {
     |> expect("int"),
   )
 
-  let assert token.TokenInt(n) = t
-  pure(ast.UntypedIntExpr(n))
+  let assert token.TokenInt(n) = t.token_type
+  pure(ast.UntypedIntExpr(value: n, span: t.span))
 }
 
 fn parse_bool() -> Parser(ast.UntypedExpression, r) {
@@ -305,8 +402,8 @@ fn parse_bool() -> Parser(ast.UntypedExpression, r) {
     |> expect("bool"),
   )
 
-  let assert token.TokenBool(b) = t
-  pure(ast.UntypedBoolExpr(b))
+  let assert token.TokenBool(b) = t.token_type
+  pure(ast.UntypedBoolExpr(value: b, span: t.span))
 }
 
 fn parse_string() -> Parser(ast.UntypedExpression, r) {
@@ -320,8 +417,8 @@ fn parse_string() -> Parser(ast.UntypedExpression, r) {
     |> expect("string"),
   )
 
-  let assert token.TokenString(s) = t
-  pure(ast.UntypedStringExpr(s))
+  let assert token.TokenString(s) = t.token_type
+  pure(ast.UntypedStringExpr(value: s, span: t.span))
 }
 
 // ================= STATEMENT =================
@@ -375,7 +472,7 @@ fn parse_define_statement() -> Parser(ast.UntypedStatement, r) {
 
   block_newline({
     use expr <- perform(parse_expression())
-    pure(ast.UntypedDefineStatement(name:, typeid:, expr:))
+    pure(ast.UntypedDefineStatement(id: name, typeid:, expr:))
   })
 }
 
@@ -423,7 +520,7 @@ fn parse_declaration() -> Parser(ast.UntypedDeclaration, r) {
   oneof([parse_function_declaration()])
 }
 
-fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.TypeId)), r) {
+fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.TypeIdentifier)), r) {
   use names <- perform(sep_by(parse_ident(), eat_exact(token.TokenComma)))
 
   case names {
@@ -436,9 +533,9 @@ fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.TypeId)), r) {
 }
 
 fn parse_function_declaration() -> Parser(ast.UntypedDeclaration, r) {
-  use _ <- perform(eat_exact(token.TokenFn))
+  use token <- perform(eat_exact(token.TokenFn))
 
-  use name <- perform(parse_ident())
+  use id <- perform(parse_ident())
 
   use _ <- perform(eat_exact(token.TokenLParen))
   use params <- perform(sep_by(parse_parameter(), eat_exact(token.TokenComma)))
@@ -449,10 +546,12 @@ fn parse_function_declaration() -> Parser(ast.UntypedDeclaration, r) {
   use body <- perform(parse_block())
 
   pure(ast.UntypedFunctionDeclaration(
-    name:,
+    id:,
     parameters: list.flatten(params),
     result: ret,
     body:,
+    //FIXME
+    span: Span(start: token.span.start, end: token.span.end),
   ))
 }
 
