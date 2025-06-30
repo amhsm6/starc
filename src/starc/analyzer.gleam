@@ -1,5 +1,5 @@
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/pair
 
 import starc/codegen/core.{
@@ -51,14 +51,14 @@ fn typify_constants(
 }
 
 fn unify(
-  ty1: ast.Type,
-  span1: Span,
-  ty2: ast.Type,
-  span2: Span,
+  actual: ast.Type,
+  actual_span: Span,
+  expected: ast.Type,
+  expected_span: Option(Span),
 ) -> Generator(ast.Type, r) {
-  case ty1, ty2 {
+  case actual, expected {
     ast.Void, _ | _, ast.Void ->
-      die(env.TypeMismatch(ty1:, span1:, ty2:, span2:))
+      die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
 
     ast.Bool, ast.Bool -> pure(ast.Bool)
 
@@ -79,12 +79,13 @@ fn unify(
 
     ast.IntConst, ast.IntConst -> pure(ast.IntConst)
 
-    ast.Pointer(ty1), ast.Pointer(ty2) -> {
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+    ast.Pointer(actual), ast.Pointer(expected) -> {
+      use ty <- perform(unify(actual, actual_span, expected, expected_span))
       pure(ast.Pointer(ty))
     }
 
-    _, _ -> die(env.TypeMismatch(ty1:, span1:, ty2:, span2:))
+    _, _ ->
+      die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
   }
 }
 
@@ -167,11 +168,10 @@ fn analyze_expression(
                   use arg <- perform(analyze_expression(arg))
 
                   use ty <- perform(unify(
-                    // FIXME: span with itself
                     ast.type_of(arg),
                     arg_span,
                     arg_ty,
-                    arg_span,
+                    None,
                   ))
                   typify_constants(arg, ty)
                 }),
@@ -196,7 +196,6 @@ fn analyze_expression(
       }
     }
 
-    // FIXME: can add everything
     ast.UntypedAddExpr(e1:, e2:, ..) -> {
       let span1 = ast.span_of(e1)
       use e1 <- perform(analyze_expression(e1))
@@ -209,7 +208,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
@@ -229,7 +228,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
@@ -249,7 +248,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
@@ -269,7 +268,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
 
       use e1 <- perform(typify_constants(e1, ty))
       use e2 <- perform(typify_constants(e2, ty))
@@ -301,7 +300,7 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
       let ty2 = ast.type_of(e2)
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -322,7 +321,7 @@ fn analyze_expression(
       use e2 <- perform(analyze_expression(e2))
       let ty2 = ast.type_of(e2)
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -346,7 +345,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -370,7 +369,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -394,7 +393,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -418,7 +417,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty1, span1))
       use _ <- perform(expect_int(ty2, span2))
 
-      use ty <- perform(unify(ty1, span1, ty2, span2))
+      use ty <- perform(unify(ty1, span1, ty2, Some(span2)))
       let ty = case ty {
         ast.IntConst -> ast.Int64
         _ -> ty
@@ -437,9 +436,8 @@ fn analyze_expression(
       let span2 = ast.span_of(e2)
       use e2 <- perform(analyze_expression(e2))
 
-      use _ <- perform(unify(ast.type_of(e1), span1, ast.Bool, span1))
-      //FIXME: span with itself
-      use _ <- perform(unify(ast.type_of(e2), span2, ast.Bool, span2))
+      use _ <- perform(unify(ast.type_of(e1), span1, ast.Bool, None))
+      use _ <- perform(unify(ast.type_of(e2), span2, ast.Bool, None))
 
       pure(ast.TypedAndExpr(e1:, e2:))
     }
@@ -451,9 +449,8 @@ fn analyze_expression(
       let span2 = ast.span_of(e2)
       use e2 <- perform(analyze_expression(e2))
 
-      use _ <- perform(unify(ast.type_of(e1), span1, ast.Bool, span1))
-      //FIXME: span with itself
-      use _ <- perform(unify(ast.type_of(e2), span2, ast.Bool, span2))
+      use _ <- perform(unify(ast.type_of(e1), span1, ast.Bool, None))
+      use _ <- perform(unify(ast.type_of(e2), span2, ast.Bool, None))
 
       pure(ast.TypedOrExpr(e1:, e2:))
     }
@@ -465,7 +462,7 @@ fn analyze_expression(
         ast.TypedBoolExpr(x) -> pure(ast.TypedBoolExpr(!x))
 
         _ -> {
-          use _ <- perform(unify(ast.type_of(e), span, ast.Bool, span))
+          use _ <- perform(unify(ast.type_of(e), span, ast.Bool, None))
           pure(ast.TypedNotExpr(e))
         }
       }
@@ -495,10 +492,10 @@ fn analyze_statement(
       use expr <- perform(analyze_expression(expr))
 
       use ty <- perform(unify(
-        ast.type_of(cell),
-        cell_span,
         ast.type_of(expr),
         expr_span,
+        ast.type_of(cell),
+        Some(cell_span),
       ))
       use expr <- perform(typify_constants(expr, ty))
       pure(ast.TypedAssignStatement(cell:, expr:))
@@ -520,10 +517,10 @@ fn analyze_statement(
           use define_ty <- perform(resolve_type(typeid))
 
           use ty <- perform(unify(
-            define_ty,
-            typeid.span,
             ast.type_of(expr),
             expr_span,
+            define_ty,
+            Some(typeid.span),
           ))
           typify_constants(expr, ty)
         }
@@ -536,7 +533,7 @@ fn analyze_statement(
       use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
 
       pure(ast.TypedDefineStatement(
-        name: ast.TypedVarExpr(ty:, frame_offset:),
+        var: ast.TypedVarExpr(ty:, frame_offset:),
         expr:,
       ))
     }
@@ -549,7 +546,7 @@ fn analyze_statement(
         ast.type_of(condition),
         condition_span,
         ast.Bool,
-        condition_span,
+        None,
       ))
 
       use _ <- perform(push_frame())
@@ -570,7 +567,7 @@ fn analyze_statement(
             ast.type_of(condition),
             condition_span,
             ast.Bool,
-            condition_span,
+            None,
           ))
 
           use _ <- perform(push_frame())
@@ -624,13 +621,7 @@ fn analyze_statement(
       use expr <- perform(analyze_expression(expr))
 
       use return_type <- perform(get_return_type())
-      use ty <- perform(unify(
-        return_type,
-        expr_span,
-        ast.type_of(expr),
-        expr_span,
-      ))
-      //FIXME: span with itself
+      use ty <- perform(unify(ast.type_of(expr), expr_span, return_type, None))
 
       use expr <- perform(typify_constants(expr, ty))
       return_found(ast.TypedReturnStatement(expr))

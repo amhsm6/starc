@@ -1,6 +1,7 @@
 import gleam/dict.{type Dict}
 import gleam/int
 import gleam/list
+import gleam/option.{type Option}
 import gleam/result
 
 import starc/lexer/token.{type Span}
@@ -29,7 +30,12 @@ pub type SemanticError {
   UnknownSymbol(ast.Identifier)
   DuplicateType(ast.TypeIdentifier)
   DuplicateSymbol(ast.Identifier)
-  TypeMismatch(ty1: ast.Type, span1: Span, ty2: ast.Type, span2: Span)
+  TypeMismatch(
+    actual: ast.Type,
+    actual_span: Span,
+    expected: ast.Type,
+    expected_span: Option(Span),
+  )
   NotInteger(ty: ast.Type, span: Span)
   FunctionAsValue(ast.Identifier)
   AddressNotOfVariable(Span)

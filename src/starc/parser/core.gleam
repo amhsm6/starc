@@ -160,7 +160,7 @@ pub fn eat(pred: fn(TokenType) -> Bool) -> Parser(Token, r) {
           ok_consumed(
             ParserState(tokens: ts, pos: t.span.end, ignore_newline:),
             t,
-            Message(pos, "", []),
+            Message(pos: t.span.end, unexpected: "", expected: []),
           )
 
         False ->

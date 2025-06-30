@@ -116,7 +116,7 @@ pub type TypedBlock =
 pub type TypedStatement {
   TypedReturnStatement(TypedExpression)
   TypedCallStatement(TypedExpression)
-  TypedDefineStatement(name: TypedExpression, expr: TypedExpression)
+  TypedDefineStatement(var: TypedExpression, expr: TypedExpression)
   TypedAssignStatement(cell: TypedExpression, expr: TypedExpression)
   TypedIfStatement(
     condition: TypedExpression,

@@ -453,8 +453,8 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
       pure(Nil)
     }
 
-    ast.TypedDefineStatement(name:, expr:) -> {
-      let assert ast.TypedVarExpr(ty:, frame_offset:) = name
+    ast.TypedDefineStatement(var:, expr:) -> {
+      let assert ast.TypedVarExpr(ty:, frame_offset:) = var
 
       use expr <- perform(generate_expression(expr))
       emit([

@@ -533,13 +533,13 @@ fn parse_parameter() -> Parser(List(#(ast.Identifier, ast.TypeIdentifier)), r) {
 }
 
 fn parse_function_declaration() -> Parser(ast.UntypedDeclaration, r) {
-  use token <- perform(eat_exact(token.TokenFn))
+  use fn_token <- perform(eat_exact(token.TokenFn))
 
   use id <- perform(parse_ident())
 
   use _ <- perform(eat_exact(token.TokenLParen))
   use params <- perform(sep_by(parse_parameter(), eat_exact(token.TokenComma)))
-  use _ <- perform(eat_exact(token.TokenRParen))
+  use rparen_token <- perform(eat_exact(token.TokenRParen))
 
   use ret <- perform(maybe(parse_typeid()))
 
@@ -550,8 +550,7 @@ fn parse_function_declaration() -> Parser(ast.UntypedDeclaration, r) {
     parameters: list.flatten(params),
     result: ret,
     body:,
-    //FIXME
-    span: Span(start: token.span.start, end: token.span.end),
+    span: Span(start: fn_token.span.start, end: rparen_token.span.end),
   ))
 }
 
