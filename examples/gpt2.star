@@ -1,4 +1,4 @@
-fn add(a int32, b int32) int32 {
+fn add(a, b int32) int32 {
     return a + b
 }
 
@@ -7,15 +7,15 @@ fn negate(x *int16) int16 {
     return *x
 }
 
-fn scale(val int64, factor int64) int64 {
+fn scale(val, factor int64) int64 {
     return val * factor
 }
 
-fn complex_calc(a int8, b int8, c int8) int8 {
+fn complex_calc(a, b, c int8) int8 {
     return a * b + c - (a + b)
 }
 
-fn logicals(x int32, y int32) bool {
+fn logicals(x, y int32) bool {
     return (x > y) || (x == 10) && !(y < 5)
 }
 
@@ -29,7 +29,7 @@ fn test_shadow(x int64) int64 {
     }
 }
 
-fn big_expression(a int64, b int64, c int64) int64 {
+fn big_expression(a, b, c int64) int64 {
     return ((a + b) * (c - a)) / 3 + (a * b - c)
 }
 
@@ -53,7 +53,7 @@ fn tricky(x int32) int32 {
     return -x
 }
 
-fn nested(a int64, b int64) int64 {
+fn nested(a, b int64) int64 {
     if a > b {
         a int64 := a - b
         if a > 5 {
@@ -67,7 +67,7 @@ fn arithmetic_chain(x int32) int32 {
     return x + 1 - 2 + 3 - 4 + 5 - 6 + 7 - 8 + 9
 }
 
-fn bool_check(a bool, b bool) bool {
+fn bool_check(a, b bool) bool {
     return !(a && b) || (a || b)
 }
 

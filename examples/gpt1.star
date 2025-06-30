@@ -1,4 +1,4 @@
-fn add8(a int8, b int8) int8 {
+fn add8(a, b int8) int8 {
     return a + b
 }
 
@@ -7,7 +7,7 @@ fn neg_shift16(p *int16) int16 {
     return *p * 2
 }
 
-fn mul_div32(x int32, y int32) int32 {
+fn mul_div32(x, y int32) int32 {
     return x * y / 3
 }
 

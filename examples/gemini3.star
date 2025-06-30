@@ -19,7 +19,7 @@ fn collatz(n int32) int32 {
     }
 }
 
-fn ackermann(m int32, n int32) int32 {
+fn ackermann(m, n int32) int32 {
     if m == 0 {
         return n + 1
     }

@@ -1,4 +1,4 @@
-fn complex_recursive_func(n int32, depth int32) int32 {
+fn complex_recursive_func(n, depth int32) int32 {
     if n <= 0 {
         print_int32(n)
         return 1

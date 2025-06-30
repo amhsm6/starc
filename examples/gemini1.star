@@ -1,9 +1,9 @@
 
-fn arithmetic_test(a int32, b int32) int32 {
+fn arithmetic_test(a, b int32) int32 {
     return (a + b) * 2 - a / b
 }
 
-fn logical_test(x bool, y bool) bool {
+fn logical_test(x, y bool) bool {
     return (x || y) && !(x && y)
 }
 
