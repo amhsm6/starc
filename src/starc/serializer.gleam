@@ -11,7 +11,10 @@ fn header() -> String {
   .global _start
   _start:
   call main
+
+  mov rdi, 0
   call exit
+
   ret
   "
 }
@@ -184,7 +187,7 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       let size = ir.size_of(to)
 
       case to, from {
-        ir.Deref(..), ir.Deref(..) -> {
+        ir.Deref(..), ir.Deref(..) | _, ir.Immediate(size: 8, ..) -> {
           let aux_register = ir.Register(ir.RegC, size:)
           string_tree.concat([
             string_tree.from_string("mov "),

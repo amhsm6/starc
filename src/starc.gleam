@@ -119,7 +119,8 @@ pub fn main() {
   case res {
     Ok(_) -> io.println("Success")
     Error(err) -> {
-      io.println_error("Error: " <> err)
+      //TODO: better errors + print to stderr
+      io.println("Error: " <> err)
       shellout.exit(1)
     }
   }
