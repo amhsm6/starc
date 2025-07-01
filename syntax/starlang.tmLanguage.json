@@ -1,0 +1,84 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Starlang",
+    "scopeName": "source.star",
+    "patterns": [
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#types"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#booleans"
+        },
+        {
+            "include": "#operators"
+        },
+        {
+            "include": "#functions"
+        }
+    ],
+    "repository": {
+        "keywords": {
+            "patterns": [{
+                "name": "keyword.control.starlang",
+                "match": "\\b(fn|return|if|else)\\b"
+            }]
+        },
+        "types": {
+            "patterns": [{
+                "name": "storage.type.starlang",
+                "match": "\\b(int8|int16|int32|int64|bool)\\b"
+            }]
+        },
+        "strings": {
+            "name": "string.quoted.double.starlang",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.starlang",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "comments": {
+            "name": "comment.line.double-slash.starlang",
+            "match": "//.*"
+        },
+        "numbers": {
+            "name": "constant.numeric.starlang",
+            "match": "\\b\\d+\\b"
+        },
+        "booleans": {
+            "name": "constant.language.boolean.starlang",
+            "match": "\\b(true|false)\\b"
+        },
+        "operators": {
+            "name": "keyword.operator.starlang",
+            "match": "(&&|\\|\\||!|:=|==|!=|>=|<=|>|<|=|[*/+-]|&)"
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "name": "support.function.starlang",
+                    "match": "\\b(print_int8|print_int16|print_int32|print_int64|print_bool)\\b"
+                },
+                {
+                    "name": "entity.name.function.starlang",
+                    "match": "(\\w+)(?=\\()"
+                }
+            ]
+        }
+    }
+}
