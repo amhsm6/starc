@@ -30,16 +30,20 @@
     ],
     "repository": {
         "keywords": {
-            "patterns": [{
-                "name": "keyword.control.starlang",
-                "match": "\\b(fn|return|if|else)\\b"
-            }]
+            "patterns": [
+                {
+                    "name": "keyword.control.starlang",
+                    "match": "\\b(fn|return|if|else)\\b"
+                }
+            ]
         },
         "types": {
-            "patterns": [{
-                "name": "storage.type.starlang",
-                "match": "\\b(int8|int16|int32|int64|bool)\\b"
-            }]
+            "patterns": [
+                {
+                    "name": "storage.type.starlang",
+                    "match": "\\b(int8|int16|int32|int64|bool)\\b"
+                }
+            ]
         },
         "strings": {
             "name": "string.quoted.double.starlang",
