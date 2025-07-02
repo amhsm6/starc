@@ -1,0 +1,25 @@
+{
+  "name": "starlang-syntax",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.0.0"
+  },
+  "contributes": {
+    "languages": [{
+      "id": "starlang",
+      "aliases": ["Starlang", "starlang"],
+      "extensions": [".star"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "starlang",
+      "scopeName": "source.star",
+      "path": "./starlang.tmLanguage.json"
+    }],
+    "iconThemes": [{
+      "id": "starlang-icon-theme",
+      "label": "Starlang Icons",
+      "path": "./icon-theme.json"
+    }]
+  }
+}

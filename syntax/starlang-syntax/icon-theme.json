@@ -1,0 +1,10 @@
+{
+  "iconDefinitions": {
+    "_starlang_icon": {
+      "iconPath": "./star.png"
+    }
+  },
+  "fileExtensions": {
+    "star": "_starlang_icon"
+  }
+}
