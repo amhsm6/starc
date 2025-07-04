@@ -1,17 +1,11 @@
-fn test_slice(ptr *int32) []int32 {
-    return []int32(ptr, 3)
-}
-
 fn main() {
-    x int32 := 10
-    y int32 := 20
-    z int32 := 30
-    slice := test_slice(&z)
+    y int8 := 20
+    z int8 := 30
+    slice := []int8(&z, 2)
 
-    print_int32(slice[0])
-    print_int32(slice[1])
-    print_int32(slice[2])
-    print_int32(slice[0] * slice[1] * slice[2])
+    print_int8(slice[0])
+    print_int8(slice[1])
+    print_int8(slice[0] * slice[1])
 }
 
 

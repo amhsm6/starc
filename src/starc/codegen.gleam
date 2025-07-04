@@ -29,10 +29,6 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
       use len <- perform(generate_expression(len))
       use _ <- perform(
         emit([
-          ir.And(
-            to: ir.deref(ir.RBP, frame_offset + 8, 8),
-            from: ir.Immediate(value: 0, size: 8),
-          ),
           ir.Move(
             to: ir.deref(ir.RBP, frame_offset + 8, ir.size_of(len)),
             from: len,
@@ -87,20 +83,15 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
       use _ <- perform(emit([ir.Push(aux_register)]))
 
       use slice <- perform(generate_expression(slice))
-      use _ <- perform(
-        emit([
-          ir.Lea(to: out_register, from: slice),
-          ir.Move(to: out_register, from: ir.deref(out_register, 0, 8)),
-        ]),
-      )
-
-      //TODO: ensure e is only memory
-      //TODO: check out of bounds through deref e, 8, 8
+      use _ <- perform(emit([ir.Lea(to: out_register, from: slice)]))
 
       use index <- perform(generate_expression(index))
       use _ <- perform(
         emit([
           ir.Move(to: aux_register, from: index),
+          ir.Cmp(aux_register, ir.deref(out_register, 8, 8)),
+          ir.JGE(ir.LabelAddress("slice_oob")),
+          ir.Move(to: out_register, from: ir.deref(out_register, 0, 8)),
           ir.Lea(
             to: out_register,
             from: ir.Deref(

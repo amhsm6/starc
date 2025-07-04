@@ -156,12 +156,7 @@ fn analyze_expression(
       use len <- perform(analyze_expression(len))
       let len_ty = ast.type_of(len)
 
-      use _ <- perform(expect_int(len_ty, len_span))
-      let len_ty = case len_ty {
-        ast.IntConst -> ast.Int64
-        _ -> len_ty
-      }
-
+      use len_ty <- perform(unify(len_ty, len_span, ast.Int64, None))
       use len <- perform(typify_constants(len, len_ty))
 
       use _ <- perform(sub_frame_offset(16))
@@ -205,12 +200,7 @@ fn analyze_expression(
       use index <- perform(analyze_expression(index))
       let index_ty = ast.type_of(index)
 
-      use _ <- perform(expect_int(index_ty, index_span))
-      let index_ty = case index_ty {
-        ast.IntConst -> ast.Int64
-        _ -> index_ty
-      }
-
+      use index_ty <- perform(unify(index_ty, index_span, ast.Int64, None))
       use index <- perform(typify_constants(index, index_ty))
 
       pure(ast.TypedIndexExpr(slice:, index:, ty: elem_ty))

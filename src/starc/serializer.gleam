@@ -7,15 +7,26 @@ import starc/codegen/ir
 fn header() -> String {
   "
   .intel_syntax noprefix
+
+  .section .data
+  oob_message: .ascii \"Slice index out of bounds\\n\\0\"
+
   .section .text
   .global _start
+
   _start:
   call main
-
   mov rdi, 0
   call exit
-
   ret
+
+  slice_oob:
+  mov rdi, offset oob_message
+  and rsp, -16
+  call printf
+  mov rdi, 1
+  call exit
+  hlt
   "
 }
 
