@@ -36,10 +36,9 @@ pub type SemanticError {
     expected: ast.Type,
     expected_span: Option(Span),
   )
-  NotInteger(ty: ast.Type, span: Span)
+  ExpectedType(actual: ast.Type, span: Span, expected: String)
   FunctionAsValue(ast.Identifier)
   AddressNotOfVariable(Span)
-  DerefNotPointer(ty: ast.Type, span: Span)
   WrongCallExpression(Span)
   CallNotFunction(Span)
   CallArgumentCountMismatch(expected: Int, actual: Int, span: Span)
@@ -150,8 +149,12 @@ pub fn resolve_type(
 
   case typeid {
     ast.TypeName(..) -> resolve_type_name(typeid)
-    ast.TypePointer(typeid, ..) ->
+
+    ast.TypePointer(typeid:, ..) ->
       resolve_type(env, typeid) |> result.map(ast.Pointer)
+
+    ast.TypeSlice(typeid:, ..) ->
+      resolve_type(env, typeid) |> result.map(ast.Slice)
   }
 }
 
@@ -188,6 +191,7 @@ pub fn assert_unique_type(
 
   case typeid {
     ast.TypeName(..) -> assert_unique_type_name(typeid)
-    ast.TypePointer(typeid, ..) -> assert_unique_type(env, typeid)
+    ast.TypePointer(typeid:, ..) -> assert_unique_type(env, typeid)
+    ast.TypeSlice(typeid:, ..) -> assert_unique_type(env, typeid)
   }
 }

@@ -9,6 +9,7 @@ pub type Identifier {
 pub type TypeIdentifier {
   TypeName(name: String, span: Span)
   TypePointer(typeid: TypeIdentifier, span: Span)
+  TypeSlice(typeid: TypeIdentifier, span: Span)
 }
 
 pub type UntypedProgram =
@@ -49,9 +50,20 @@ pub type UntypedExpression {
   UntypedBoolExpr(value: Bool, span: Span)
   UntypedStringExpr(value: String, span: Span)
   UntypedVarExpr(Identifier)
+  UntypedSliceExpr(
+    ptr: UntypedExpression,
+    len: UntypedExpression,
+    elem_typeid: TypeIdentifier,
+    span: Span,
+  )
 
   UntypedAddrOfExpr(e: UntypedExpression, span: Span)
   UntypedDerefExpr(e: UntypedExpression, span: Span)
+  UntypedIndexExpr(
+    slice: UntypedExpression,
+    index: UntypedExpression,
+    span: Span,
+  )
 
   UntypedAddExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
   UntypedSubExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
@@ -85,6 +97,7 @@ pub fn span_of(expr: UntypedExpression) -> Span {
     UntypedBoolExpr(span:, ..) -> span
     UntypedCallExpression(span:, ..) -> span
     UntypedDerefExpr(span:, ..) -> span
+    UntypedIndexExpr(span:, ..) -> span
     UntypedDivExpr(span:, ..) -> span
     UntypedEQExpr(span:, ..) -> span
     UntypedGEExpr(span:, ..) -> span
@@ -100,6 +113,7 @@ pub fn span_of(expr: UntypedExpression) -> Span {
     UntypedStringExpr(span:, ..) -> span
     UntypedSubExpr(span:, ..) -> span
     UntypedVarExpr(id) -> id.span
+    UntypedSliceExpr(span:, ..) -> span
   }
 }
 
@@ -130,9 +144,16 @@ pub type TypedExpression {
   TypedIntExpr(value: Int, ty: Type)
   TypedBoolExpr(Bool)
   TypedVarExpr(ty: Type, frame_offset: Int)
+  TypedSliceExpr(
+    ptr: TypedExpression,
+    len: TypedExpression,
+    frame_offset: Int,
+    ty: Type,
+  )
 
   TypedAddrOfExpr(e: TypedExpression, ty: Type)
   TypedDerefExpr(e: TypedExpression, ty: Type)
+  TypedIndexExpr(slice: TypedExpression, index: TypedExpression, ty: Type)
 
   TypedAddExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
   TypedSubExpr(e1: TypedExpression, e2: TypedExpression, ty: Type)
@@ -167,6 +188,7 @@ pub type Type {
   Int32
   Int64
   Pointer(Type)
+  Slice(Type)
   IntConst
 }
 
@@ -179,6 +201,7 @@ pub fn size_of(ty: Type) -> Int {
     Int32 -> 4
     Int64 -> 8
     Pointer(..) -> 8
+    Slice(..) -> 16
     IntConst -> panic
   }
 }
@@ -188,9 +211,11 @@ pub fn type_of(expr: TypedExpression) -> Type {
     TypedIntExpr(ty:, ..) -> ty
     TypedBoolExpr(..) -> Bool
     TypedVarExpr(ty:, ..) -> ty
+    TypedSliceExpr(ty:, ..) -> ty
 
     TypedAddrOfExpr(ty:, ..) -> ty
     TypedDerefExpr(ty:, ..) -> ty
+    TypedIndexExpr(ty:, ..) -> ty
 
     TypedAddExpr(ty:, ..) -> ty
     TypedSubExpr(ty:, ..) -> ty

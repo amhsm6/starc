@@ -41,6 +41,8 @@ fn symbol() -> Lexer(Option(Token), r) {
     eat_exact(")") |> to_token(token.TokenRParen),
     eat_exact("{") |> to_token(token.TokenLBrace),
     eat_exact("}") |> to_token(token.TokenRBrace),
+    eat_exact("[") |> to_token(token.TokenLSquare),
+    eat_exact("]") |> to_token(token.TokenRSquare),
     eat_exact("!=") |> to_token(token.TokenNotEquals),
     eat_exact("&&") |> to_token(token.TokenDoubleAmpersand),
     eat_exact("||") |> to_token(token.TokenDoubleBar),

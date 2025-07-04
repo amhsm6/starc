@@ -29,8 +29,12 @@ pub type TokenType {
 
   TokenLParen
   TokenRParen
+
   TokenLBrace
   TokenRBrace
+
+  TokenLSquare
+  TokenRSquare
 
   TokenPlus
   TokenMinus

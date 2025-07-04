@@ -64,6 +64,7 @@ fn serialize_value(value: ir.Value) -> StringTree {
         2 -> string_tree.from_string("word ptr")
         4 -> string_tree.from_string("dword ptr")
         8 -> string_tree.from_string("qword ptr")
+        16 -> string_tree.new()
         _ -> panic
       }
 
@@ -187,6 +188,18 @@ fn serialize_statement(statement: ir.Statement) -> StringTree {
       let size = ir.size_of(to)
 
       case to, from {
+        ir.Deref(..), ir.Deref(..) if size == 16 -> {
+          string_tree.concat([
+            string_tree.from_string("movups xmm0"),
+            string_tree.from_string(", "),
+            serialize_value(from),
+            string_tree.from_string("\n"),
+            string_tree.from_string("movups "),
+            serialize_value(to),
+            string_tree.from_string(", xmm0"),
+          ])
+        }
+
         ir.Deref(..), ir.Deref(..) | _, ir.Immediate(size: 8, ..) -> {
           let aux_register = ir.Register(ir.RegC, size:)
           string_tree.concat([

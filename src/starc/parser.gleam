@@ -16,7 +16,7 @@ pub type ParserError {
   NotParsed(String)
 }
 
-// ================= BASIC =================
+// ================= IDENTIFIER =================
 
 fn parse_ident() -> Parser(ast.Identifier, r) {
   use t <- perform(
@@ -33,22 +33,35 @@ fn parse_ident() -> Parser(ast.Identifier, r) {
   pure(ast.Identifier(name:, span: t.span))
 }
 
-fn parse_typeid() -> Parser(ast.TypeIdentifier, r) {
-  use ptr <- perform(maybe(eat_exact(token.TokenStar)))
-  case ptr {
-    None ->
-      parse_ident()
-      |> expect("type")
-      |> map(fn(id) { ast.TypeName(name: id.name, span: id.span) })
+// ================= TYPE =================
 
-    Some(token) -> {
-      use typeid <- perform(parse_typeid())
-      pure(ast.TypePointer(
-        typeid:,
-        span: Span(start: token.span.start, end: typeid.span.end),
-      ))
-    }
-  }
+fn parse_typeid() -> Parser(ast.TypeIdentifier, r) {
+  oneof([parse_type_pointer(), parse_type_slice(), parse_type_name()])
+}
+
+fn parse_type_pointer() -> Parser(ast.TypeIdentifier, r) {
+  use token <- perform(eat_exact(token.TokenStar))
+  use typeid <- perform(parse_typeid())
+  pure(ast.TypePointer(
+    typeid:,
+    span: Span(start: token.span.start, end: typeid.span.end),
+  ))
+}
+
+fn parse_type_slice() -> Parser(ast.TypeIdentifier, r) {
+  use token <- perform(eat_exact(token.TokenLSquare))
+  use _ <- perform(eat_exact(token.TokenRSquare))
+  use typeid <- perform(parse_typeid())
+  pure(ast.TypeSlice(
+    typeid:,
+    span: Span(start: token.span.start, end: typeid.span.end),
+  ))
+}
+
+fn parse_type_name() -> Parser(ast.TypeIdentifier, r) {
+  parse_ident()
+  |> expect("type name")
+  |> map(fn(id) { ast.TypeName(name: id.name, span: id.span) })
 }
 
 // ================= EXPRESSION =================
@@ -246,7 +259,7 @@ fn parse_additive_expression() -> Parser(ast.UntypedExpression, r) {
 }
 
 fn parse_multiplicative_expression() -> Parser(ast.UntypedExpression, r) {
-  use expr <- perform(parse_primary_expression())
+  use expr <- perform(parse_postfix_expression())
 
   use next <- perform(
     many({
@@ -259,7 +272,7 @@ fn parse_multiplicative_expression() -> Parser(ast.UntypedExpression, r) {
           }
         }),
       )
-      use e <- perform(parse_primary_expression())
+      use e <- perform(parse_postfix_expression())
       pure(#(t, e))
     }),
   )
@@ -288,92 +301,46 @@ fn parse_multiplicative_expression() -> Parser(ast.UntypedExpression, r) {
   )
 }
 
+// TODO: multiple index
+fn parse_postfix_expression() -> Parser(ast.UntypedExpression, r) {
+  use left <- perform(parse_primary_expression())
+  use index <- perform(
+    maybe({
+      use _ <- perform(eat_exact(token.TokenLSquare))
+      use index <- perform(ignore_newline(parse_expression()))
+      eat_newlines({
+        use token <- perform(eat_exact(token.TokenRSquare))
+        pure(#(index, token.span.end))
+      })
+    }),
+  )
+
+  case index {
+    None -> pure(left)
+
+    Some(#(index, end)) ->
+      pure(ast.UntypedIndexExpr(
+        slice: left,
+        index:,
+        span: Span(start: ast.span_of(left).start, end:),
+      ))
+  }
+}
+
 fn parse_primary_expression() -> Parser(ast.UntypedExpression, r) {
   oneof([
-    parse_call_expression(),
+    parse_int(),
+    parse_bool(),
+    parse_string(),
     parse_nested_expression(),
     parse_addrof_expression(),
     parse_deref_expression(),
     parse_neg_expression(),
     parse_not_expression(),
+    parse_call_expression(),
     parse_var_expression(),
-    parse_int(),
-    parse_bool(),
-    parse_string(),
+    parse_slice_expression(),
   ])
-}
-
-fn parse_call_expression() -> Parser(ast.UntypedExpression, r) {
-  use function <- perform(
-    try({
-      use function <- perform(parse_var_expression())
-      use _ <- perform(eat_exact(token.TokenLParen))
-      pure(function)
-    }),
-  )
-
-  use args <- perform(
-    ignore_newline(sep_by(parse_expression(), eat_exact(token.TokenComma))),
-  )
-
-  eat_newlines({
-    use token <- perform(eat_exact(token.TokenRParen))
-    pure(ast.UntypedCallExpression(
-      f: function,
-      args:,
-      span: Span(start: ast.span_of(function).start, end: token.span.end),
-    ))
-  })
-}
-
-fn parse_nested_expression() -> Parser(ast.UntypedExpression, r) {
-  use _ <- perform(eat_exact(token.TokenLParen))
-  use expr <- perform(ignore_newline(parse_expression()))
-  eat_newlines({
-    use _ <- perform(eat_exact(token.TokenRParen))
-    pure(expr)
-  })
-}
-
-fn parse_not_expression() -> Parser(ast.UntypedExpression, r) {
-  use token <- perform(eat_exact(token.TokenBang))
-  use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedNotExpr(
-    e: expr,
-    span: Span(start: token.span.start, end: ast.span_of(expr).end),
-  ))
-}
-
-fn parse_addrof_expression() -> Parser(ast.UntypedExpression, r) {
-  use token <- perform(eat_exact(token.TokenAmpersand))
-  use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedAddrOfExpr(
-    e: expr,
-    span: Span(start: token.span.start, end: ast.span_of(expr).end),
-  ))
-}
-
-fn parse_deref_expression() -> Parser(ast.UntypedExpression, r) {
-  use token <- perform(eat_exact(token.TokenStar))
-  use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedDerefExpr(
-    e: expr,
-    span: Span(start: token.span.start, end: ast.span_of(expr).end),
-  ))
-}
-
-fn parse_neg_expression() -> Parser(ast.UntypedExpression, r) {
-  use token <- perform(eat_exact(token.TokenMinus))
-  use expr <- perform(parse_primary_expression())
-  pure(ast.UntypedNegExpr(
-    e: expr,
-    span: Span(start: token.span.start, end: ast.span_of(expr).end),
-  ))
-}
-
-fn parse_var_expression() -> Parser(ast.UntypedExpression, r) {
-  use id <- perform(parse_ident())
-  pure(ast.UntypedVarExpr(id))
 }
 
 fn parse_int() -> Parser(ast.UntypedExpression, r) {
@@ -419,6 +386,105 @@ fn parse_string() -> Parser(ast.UntypedExpression, r) {
 
   let assert token.TokenString(s) = t.token_type
   pure(ast.UntypedStringExpr(value: s, span: t.span))
+}
+
+// FIXME: span
+fn parse_nested_expression() -> Parser(ast.UntypedExpression, r) {
+  use _ <- perform(eat_exact(token.TokenLParen))
+  use expr <- perform(ignore_newline(parse_expression()))
+  eat_newlines({
+    use _ <- perform(eat_exact(token.TokenRParen))
+    pure(expr)
+  })
+}
+
+fn parse_addrof_expression() -> Parser(ast.UntypedExpression, r) {
+  use token <- perform(eat_exact(token.TokenAmpersand))
+  use expr <- perform(parse_postfix_expression())
+  pure(ast.UntypedAddrOfExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
+}
+
+fn parse_deref_expression() -> Parser(ast.UntypedExpression, r) {
+  use token <- perform(eat_exact(token.TokenStar))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.UntypedDerefExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
+}
+
+fn parse_neg_expression() -> Parser(ast.UntypedExpression, r) {
+  use token <- perform(eat_exact(token.TokenMinus))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.UntypedNegExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
+}
+
+fn parse_not_expression() -> Parser(ast.UntypedExpression, r) {
+  use token <- perform(eat_exact(token.TokenBang))
+  use expr <- perform(parse_primary_expression())
+  pure(ast.UntypedNotExpr(
+    e: expr,
+    span: Span(start: token.span.start, end: ast.span_of(expr).end),
+  ))
+}
+
+// TODO: move this to postfix
+fn parse_call_expression() -> Parser(ast.UntypedExpression, r) {
+  use function <- perform(
+    try({
+      use function <- perform(parse_var_expression())
+      use _ <- perform(eat_exact(token.TokenLParen))
+      pure(function)
+    }),
+  )
+
+  use args <- perform(
+    ignore_newline(sep_by(parse_expression(), eat_exact(token.TokenComma))),
+  )
+
+  eat_newlines({
+    use token <- perform(eat_exact(token.TokenRParen))
+    pure(ast.UntypedCallExpression(
+      f: function,
+      args:,
+      span: Span(start: ast.span_of(function).start, end: token.span.end),
+    ))
+  })
+}
+
+fn parse_var_expression() -> Parser(ast.UntypedExpression, r) {
+  use id <- perform(parse_ident())
+  pure(ast.UntypedVarExpr(id))
+}
+
+fn parse_slice_expression() -> Parser(ast.UntypedExpression, r) {
+  use typeid <- perform(parse_type_slice())
+  let assert ast.TypeSlice(typeid: elem_typeid, span: Span(start:, ..)) = typeid
+
+  use _ <- perform(eat_exact(token.TokenLParen))
+  use #(ptr, len) <- perform(
+    ignore_newline({
+      use ptr <- perform(parse_expression())
+      use _ <- perform(eat_exact(token.TokenComma))
+      use len <- perform(parse_expression())
+      pure(#(ptr, len))
+    }),
+  )
+  eat_newlines({
+    use token <- perform(eat_exact(token.TokenRParen))
+    pure(ast.UntypedSliceExpr(
+      ptr:,
+      len:,
+      elem_typeid:,
+      span: Span(start:, end: token.span.end),
+    ))
+  })
 }
 
 // ================= STATEMENT =================

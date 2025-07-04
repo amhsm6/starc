@@ -20,6 +20,29 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     ast.TypedVarExpr(ty:, frame_offset:) ->
       pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
 
+    ast.TypedSliceExpr(ptr:, len:, frame_offset:, ty:) -> {
+      use ptr <- perform(generate_expression(ptr))
+      use _ <- perform(
+        emit([ir.Move(to: ir.deref(ir.RBP, frame_offset, 8), from: ptr)]),
+      )
+
+      use len <- perform(generate_expression(len))
+      use _ <- perform(
+        emit([
+          ir.And(
+            to: ir.deref(ir.RBP, frame_offset + 8, 8),
+            from: ir.Immediate(value: 0, size: 8),
+          ),
+          ir.Move(
+            to: ir.deref(ir.RBP, frame_offset + 8, ir.size_of(len)),
+            from: len,
+          ),
+        ]),
+      )
+
+      pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
+    }
+
     ast.TypedAddrOfExpr(e:, ..) -> {
       case e {
         ast.TypedVarExpr(ty:, frame_offset:) -> {
@@ -35,6 +58,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           pure(ir.Register(reg: ir.RegA, size: 8))
         }
 
+        ast.TypedSliceExpr(..) -> todo
+
+        ast.TypedIndexExpr(..) -> todo
+
         _ -> panic
       }
     }
@@ -42,15 +69,52 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     ast.TypedDerefExpr(e:, ty:) -> {
       use e <- perform(generate_expression(e))
       case e {
-        ir.Deref(size:, ..) -> {
+        ir.Deref(..) -> {
           use _ <- perform(
-            emit([ir.Move(to: ir.Register(reg: ir.RegA, size:), from: e)]),
+            emit([ir.Move(to: ir.Register(reg: ir.RegA, size: 8), from: e)]),
           )
-          pure(ir.deref(ir.Register(reg: ir.RegA, size:), 0, ast.size_of(ty)))
+          pure(ir.deref(ir.Register(reg: ir.RegA, size: 8), 0, ast.size_of(ty)))
         }
 
         _ -> pure(ir.deref(e, 0, ast.size_of(ty)))
       }
+    }
+
+    ast.TypedIndexExpr(slice:, index:, ty:) -> {
+      let out_register = ir.Register(reg: ir.RegA, size: 8)
+      let aux_register = ir.Register(reg: ir.RegB, size: 8)
+
+      use _ <- perform(emit([ir.Push(aux_register)]))
+
+      use slice <- perform(generate_expression(slice))
+      use _ <- perform(
+        emit([
+          ir.Lea(to: out_register, from: slice),
+          ir.Move(to: out_register, from: ir.deref(out_register, 0, 8)),
+        ]),
+      )
+
+      //TODO: ensure e is only memory
+      //TODO: check out of bounds through deref e, 8, 8
+
+      use index <- perform(generate_expression(index))
+      use _ <- perform(
+        emit([
+          ir.Move(to: aux_register, from: index),
+          ir.Lea(
+            to: out_register,
+            from: ir.Deref(
+              value: out_register,
+              offset: aux_register,
+              multiplier: ast.size_of(ty),
+              size: ast.size_of(ty),
+            ),
+          ),
+          ir.Pop(aux_register),
+        ]),
+      )
+
+      pure(ir.deref(out_register, 0, ast.size_of(ty)))
     }
 
     ast.TypedCallExpression(label:, args:, return_type:, return_frame_offset:) -> {

@@ -84,6 +84,11 @@ fn unify(
       pure(ast.Pointer(ty))
     }
 
+    ast.Slice(actual), ast.Slice(expected) -> {
+      use ty <- perform(unify(actual, actual_span, expected, expected_span))
+      pure(ast.Slice(ty))
+    }
+
     _, _ ->
       die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
   }
@@ -92,7 +97,21 @@ fn unify(
 fn expect_int(ty: ast.Type, span: Span) -> Generator(Nil, r) {
   case ty {
     ast.Int8 | ast.Int16 | ast.Int32 | ast.Int64 | ast.IntConst -> pure(Nil)
-    _ -> die(env.NotInteger(ty:, span:))
+    _ -> die(env.ExpectedType(actual: ty, span:, expected: "integer"))
+  }
+}
+
+fn expect_pointer(ty: ast.Type, span: Span) -> Generator(Nil, r) {
+  case ty {
+    ast.Pointer(..) -> pure(Nil)
+    _ -> die(env.ExpectedType(actual: ty, span:, expected: "pointer"))
+  }
+}
+
+fn expect_slice(ty: ast.Type, span: Span) -> Generator(Nil, r) {
+  case ty {
+    ast.Slice(..) -> pure(Nil)
+    _ -> die(env.ExpectedType(actual: ty, span:, expected: "slice"))
   }
 }
 
@@ -117,6 +136,40 @@ fn analyze_expression(
       }
     }
 
+    ast.UntypedSliceExpr(ptr:, len:, elem_typeid:, ..) -> {
+      let ptr_span = ast.span_of(ptr)
+      use ptr <- perform(analyze_expression(ptr))
+      let ptr_ty = ast.type_of(ptr)
+
+      use _ <- perform(expect_pointer(ptr_ty, ptr_span))
+      let assert ast.Pointer(elem_ty) = ptr_ty
+
+      use elem_def_ty <- perform(resolve_type(elem_typeid))
+      use _ <- perform(unify(
+        elem_ty,
+        ptr_span,
+        elem_def_ty,
+        Some(elem_typeid.span),
+      ))
+
+      let len_span = ast.span_of(len)
+      use len <- perform(analyze_expression(len))
+      let len_ty = ast.type_of(len)
+
+      use _ <- perform(expect_int(len_ty, len_span))
+      let len_ty = case len_ty {
+        ast.IntConst -> ast.Int64
+        _ -> len_ty
+      }
+
+      use len <- perform(typify_constants(len, len_ty))
+
+      use _ <- perform(sub_frame_offset(16))
+      use frame_offset <- perform(get_frame_offset())
+
+      pure(ast.TypedSliceExpr(ptr:, len:, frame_offset:, ty: ast.Slice(elem_ty)))
+    }
+
     //TODO: address of other things
     ast.UntypedAddrOfExpr(e:, ..) -> {
       let span = ast.span_of(e)
@@ -132,11 +185,35 @@ fn analyze_expression(
     ast.UntypedDerefExpr(e:, ..) -> {
       let span = ast.span_of(e)
       use e <- perform(analyze_expression(e))
-      case ast.type_of(e) {
-        ast.Pointer(ty) -> pure(ast.TypedDerefExpr(e:, ty:))
+      let ty = ast.type_of(e)
 
-        ty -> die(env.DerefNotPointer(ty:, span:))
+      use _ <- perform(expect_pointer(ty, span))
+      let assert ast.Pointer(ty) = ty
+
+      pure(ast.TypedDerefExpr(e:, ty:))
+    }
+
+    ast.UntypedIndexExpr(slice:, index:, ..) -> {
+      let slice_span = ast.span_of(slice)
+      use slice <- perform(analyze_expression(slice))
+      let slice_ty = ast.type_of(slice)
+
+      use _ <- perform(expect_slice(slice_ty, slice_span))
+      let assert ast.Slice(elem_ty) = slice_ty
+
+      let index_span = ast.span_of(index)
+      use index <- perform(analyze_expression(index))
+      let index_ty = ast.type_of(index)
+
+      use _ <- perform(expect_int(index_ty, index_span))
+      let index_ty = case index_ty {
+        ast.IntConst -> ast.Int64
+        _ -> index_ty
       }
+
+      use index <- perform(typify_constants(index, index_ty))
+
+      pure(ast.TypedIndexExpr(slice:, index:, ty: elem_ty))
     }
 
     // TODO: call any function pointer, pass the address instead of the label
