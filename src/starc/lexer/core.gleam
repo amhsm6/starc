@@ -3,7 +3,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/string
 
 import starc/lexer/token.{
-  type Pos, type Span, Pos, Span, advance_chars, advance_lines,
+  type Pos, type Span, Pos, Span, advance_chars, advance_lines
 }
 
 pub type Lexer(a, r) {
@@ -36,10 +36,10 @@ pub fn perform(l: Lexer(a, r), f: fn(a) -> Lexer(b, r)) -> Lexer(b, r) {
           let span = Span(start: span1.start, end: span2.end)
           succ(state, span, y)
         },
-        fail,
+        fail
       )
     },
-    fail,
+    fail
   )
 }
 
@@ -60,8 +60,12 @@ pub fn eat(pred: fn(String) -> Bool) -> Lexer(String, r) {
   use LexerState(input:, pos:), succ, fail <- Lexer
 
   case string.pop_grapheme(input) {
+    Error(_) -> fail()
+
     Ok(#(char, input)) -> {
       case pred(char) {
+        False -> fail()
+
         True -> {
           let start_pos = pos
           let pos = case char {
@@ -71,12 +75,8 @@ pub fn eat(pred: fn(String) -> Bool) -> Lexer(String, r) {
 
           succ(LexerState(input:, pos:), Span(start: start_pos, end: pos), char)
         }
-
-        False -> fail()
       }
     }
-
-    Error(_) -> fail()
   }
 }
 
@@ -114,11 +114,13 @@ pub fn many(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
 fn many_loop(
   l: Lexer(a, #(LexerState, List(a))),
   state: LexerState,
-  result: List(a),
+  result: List(a)
 ) -> #(LexerState, List(a)) {
-  l.run(state, fn(state, _, x) { many_loop(l, state, [x, ..result]) }, fn() {
-    #(state, result)
-  })
+  l.run(
+    state,
+    fn(state, _, x) { many_loop(l, state, [x, ..result]) },
+    fn() { #(state, result) }
+  )
 }
 
 pub fn some(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
@@ -129,12 +131,7 @@ pub fn some(l: Lexer(a, #(LexerState, List(a)))) -> Lexer(List(a), r) {
   }
 }
 
-pub fn lex(
-  l: Lexer(a, Option(#(LexerState, a))),
-  input: String,
-) -> Option(#(LexerState, a)) {
-  let start = Pos(line: 1, char: 1)
-  let state = LexerState(input:, pos: start)
-
+pub fn lex(l: Lexer(a, Option(#(LexerState, a))), input: String) -> Option(#(LexerState, a)) {
+  let state = LexerState(input:, pos: Pos(line: 1, char: 1))
   l.run(state, fn(state, _, x) { Some(#(state, x)) }, fn() { None })
 }

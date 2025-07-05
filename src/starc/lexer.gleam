@@ -7,7 +7,7 @@ import gleam/string
 
 import starc/lexer/core.{
   type Lexer, LexerState, eat, eat_exact, extract_span, lex, many, map, oneof,
-  perform, pure, replace, some,
+  perform, pure, replace, some
 }
 import starc/lexer/token.{type Pos, type Token, type TokenType, Token}
 import starc/lexer/util
@@ -31,7 +31,7 @@ fn comment() -> Lexer(Option(Token), r) {
 fn whitespace() -> Lexer(Option(Token), r) {
   oneof([
     eat_exact(" ") |> replace(None),
-    eat_exact("\n") |> to_token(token.TokenNewline),
+    eat_exact("\n") |> to_token(token.TokenNewline)
   ])
 }
 
@@ -64,7 +64,7 @@ fn symbol() -> Lexer(Option(Token), r) {
     eat_exact("return") |> to_token(token.TokenReturn),
     eat_exact("if") |> to_token(token.TokenIf),
     eat_exact("else if") |> to_token(token.TokenElseIf),
-    eat_exact("else") |> to_token(token.TokenElse),
+    eat_exact("else") |> to_token(token.TokenElse)
   ])
 }
 
@@ -86,7 +86,6 @@ fn ident() -> Lexer(Option(Token), r) {
 
 fn digit() -> Lexer(Int, r) {
   use c <- perform(eat(fn(c) { int.parse(c) |> result.is_ok() }))
-
   let assert Ok(n) = int.parse(c)
   pure(n)
 }
@@ -107,7 +106,7 @@ fn int() -> Lexer(Option(Token), r) {
 fn bool() -> Lexer(Option(Token), r) {
   oneof([
     eat_exact("true") |> to_token(token.TokenBool(True)),
-    eat_exact("false") |> to_token(token.TokenBool(False)),
+    eat_exact("false") |> to_token(token.TokenBool(False))
   ])
 }
 
@@ -132,11 +131,8 @@ fn token() -> Lexer(Option(Token), r) {
 pub fn lex_program(input: String) -> Result(List(Token), LexerError) {
   let l = many(token())
   let assert Some(#(state, tokens)) = lex(l, input)
-
   case state {
     LexerState(input: "", ..) -> Ok(option.values(tokens))
-
-    LexerState(input:, pos:) ->
-      Error(UnexpectedToken(at: pos, next: string.slice(input, 0, 5)))
+    LexerState(input:, pos:) -> Error(UnexpectedToken(at: pos, next: string.slice(input, 0, 5)))
   }
 }

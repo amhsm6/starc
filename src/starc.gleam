@@ -44,29 +44,29 @@ fn compile(cmd: Command) -> Result(Nil, String) {
   let res = {
     use input <- result.try(
       simplifile.read(input)
-      |> result.map_error(FileError),
+      |> result.map_error(FileError)
     )
 
     use tokens <- result.try(
       lexer.lex_program(input)
-      |> result.map_error(LexerError),
+      |> result.map_error(LexerError)
     )
 
     use tree <- result.try(
       parser.parse_program(tokens)
-      |> result.map_error(ParserError),
+      |> result.map_error(ParserError)
     )
 
     use ir <- result.try(
       codegen.generate_program(tree)
-      |> result.map_error(SemanticError),
+      |> result.map_error(SemanticError)
     )
 
     let assembly = serializer.serialize_program(ir)
 
     use _ <- result.try(
       simplifile.write(output, assembly)
-      |> result.map_error(FileError),
+      |> result.map_error(FileError)
     )
 
     Ok(Nil)
@@ -92,8 +92,7 @@ fn compile(cmd: Command) -> Result(Nil, String) {
         <> ", but found "
         <> msg.unexpected
 
-      ParserError(parser.NotParsed(not_parsed)) ->
-        "Parser error: Not parsed: " <> not_parsed
+      ParserError(parser.NotParsed(not_parsed)) -> "Parser error: Not parsed: " <> not_parsed
 
       SemanticError(err) -> "Codegen error: " <> string.inspect(err)
     }
@@ -118,6 +117,7 @@ pub fn main() {
 
   case res {
     Ok(_) -> io.println("Success")
+
     Error(err) -> {
       //TODO: better errors + print to stderr
       io.println("Error: " <> err)

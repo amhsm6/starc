@@ -21,7 +21,7 @@ pub type UntypedDeclaration {
     parameters: List(#(Identifier, TypeIdentifier)),
     result: Option(TypeIdentifier),
     body: UntypedBlock,
-    span: Span,
+    span: Span
   )
 }
 
@@ -34,14 +34,14 @@ pub type UntypedStatement {
   UntypedDefineStatement(
     id: Identifier,
     typeid: Option(TypeIdentifier),
-    expr: UntypedExpression,
+    expr: UntypedExpression
   )
   UntypedAssignStatement(cell: UntypedExpression, expr: UntypedExpression)
   UntypedIfStatement(
     condition: UntypedExpression,
     block: UntypedBlock,
     elseifs: List(#(UntypedExpression, UntypedBlock)),
-    elseblock: Option(UntypedBlock),
+    elseblock: Option(UntypedBlock)
   )
 }
 
@@ -54,16 +54,12 @@ pub type UntypedExpression {
     ptr: UntypedExpression,
     len: UntypedExpression,
     elem_typeid: TypeIdentifier,
-    span: Span,
+    span: Span
   )
 
   UntypedAddrOfExpr(e: UntypedExpression, span: Span)
   UntypedDerefExpr(e: UntypedExpression, span: Span)
-  UntypedIndexExpr(
-    slice: UntypedExpression,
-    index: UntypedExpression,
-    span: Span,
-  )
+  UntypedIndexExpr(slice: UntypedExpression, index: UntypedExpression, span: Span)
 
   UntypedAddExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
   UntypedSubExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
@@ -82,11 +78,7 @@ pub type UntypedExpression {
   UntypedOrExpr(e1: UntypedExpression, e2: UntypedExpression, span: Span)
   UntypedNotExpr(e: UntypedExpression, span: Span)
 
-  UntypedCallExpression(
-    f: UntypedExpression,
-    args: List(UntypedExpression),
-    span: Span,
-  )
+  UntypedCallExpression(f: UntypedExpression, args: List(UntypedExpression), span: Span)
 }
 
 pub fn span_of(expr: UntypedExpression) -> Span {
@@ -136,7 +128,7 @@ pub type TypedStatement {
     condition: TypedExpression,
     block: TypedBlock,
     elseifs: List(#(TypedExpression, TypedBlock)),
-    elseblock: Option(TypedBlock),
+    elseblock: Option(TypedBlock)
   )
 }
 
@@ -148,7 +140,7 @@ pub type TypedExpression {
     ptr: TypedExpression,
     len: TypedExpression,
     frame_offset: Int,
-    ty: Type,
+    ty: Type
   )
 
   TypedAddrOfExpr(e: TypedExpression, ty: Type)
@@ -176,7 +168,7 @@ pub type TypedExpression {
     label: String,
     args: List(TypedExpression),
     return_type: Type,
-    return_frame_offset: Int,
+    return_frame_offset: Int
   )
 }
 
