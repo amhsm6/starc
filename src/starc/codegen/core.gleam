@@ -1,21 +1,16 @@
 import gleam/list
 
-import starc/codegen/env.{
-  type Environment, type SemanticError, type Symbol, Environment,
-}
+import starc/codegen/env.{type Environment, type SemanticError, type Symbol, Environment}
 import starc/codegen/ir
 import starc/parser/ast
 
 pub type Generator(a, r) {
-  Generator(
-    run: fn(
-      Environment,
-      fn(Environment, List(ir.Statement), a) -> r,
-      fn(Environment, a) -> r,
-      fn(SemanticError) -> r,
-    ) ->
-      r,
-  )
+  Generator(run: fn(
+    Environment,
+    fn(Environment, List(ir.Statement), a) -> r,
+    fn(Environment, a) -> r,
+    fn(SemanticError) -> r
+  ) -> r)
 }
 
 pub fn pure(x: a) -> Generator(a, r) {
@@ -33,10 +28,7 @@ pub fn return_found(x: a) -> Generator(a, r) {
   return_found(env, x)
 }
 
-pub fn perform(
-  g: Generator(a, r),
-  f: fn(a) -> Generator(b, r),
-) -> Generator(b, r) {
+pub fn perform(g: Generator(a, r), f: fn(a) -> Generator(b, r)) -> Generator(b, r) {
   use env, succ, return_found, fail <- Generator
 
   g.run(
@@ -46,11 +38,11 @@ pub fn perform(
         env,
         fn(env, code2, y) { succ(env, list.append(code, code2), y) },
         return_found,
-        fail,
+        fail
       )
     },
     fn(_, _) { panic },
-    fail,
+    fail
   )
 }
 
@@ -73,10 +65,7 @@ pub fn set(env: Environment) -> Generator(Nil, r) {
   succ(env, [], Nil)
 }
 
-pub fn traverse(
-  list: List(a),
-  f: fn(a) -> Generator(b, r),
-) -> Generator(List(b), r) {
+pub fn traverse(list: List(a), f: fn(a) -> Generator(b, r)) -> Generator(List(b), r) {
   list.fold(list, pure([]), fn(gen, element) {
     use x <- perform(gen)
     use y <- perform(f(element))
@@ -87,7 +76,7 @@ pub fn traverse(
 
 pub fn traverse_until_return(
   list: List(a),
-  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), SemanticError)),
+  f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), SemanticError))
 ) -> Generator(#(List(b), Bool), r) {
   use env, succ, _, fail <- Generator
 
@@ -101,7 +90,7 @@ fn traverse_until_return_loop(
   list: List(a),
   f: fn(a) -> Generator(b, Result(#(Environment, List(b), Bool), SemanticError)),
   env: Environment,
-  result: List(b),
+  result: List(b)
 ) -> Result(#(Environment, List(b), Bool), SemanticError) {
   case list {
     [x, ..xs] ->
@@ -109,22 +98,20 @@ fn traverse_until_return_loop(
         env,
         fn(env, _, y) { traverse_until_return_loop(xs, f, env, [y, ..result]) },
         fn(env, y) { Ok(#(env, list.reverse([y, ..result]), True)) },
-        Error,
+        Error
       )
 
     [] -> Ok(#(env, list.reverse(result), False))
   }
 }
 
-pub fn generate(
-  gen: Generator(a, Result(List(ir.Statement), SemanticError)),
-) -> Result(List(ir.Statement), SemanticError) {
+pub fn generate(gen: Generator(a, Result(List(ir.Statement), SemanticError))) -> Result(List(ir.Statement), SemanticError) {
   let env =
     Environment(
       frames: [env.builtin()],
       frame_offset: 0,
       return_type: ast.Void,
-      label_counter: 0,
+      label_counter: 0
     )
 
   gen.run(env, fn(_, code, _) { Ok(code) }, fn(_, _) { panic }, Error)

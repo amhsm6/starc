@@ -72,6 +72,6 @@ pub fn deref(x: Value, offset: Int, size: Int) -> Value {
     value: x,
     offset: Immediate(value: offset, size: 8),
     multiplier: 1,
-    size:,
+    size:
   )
 }

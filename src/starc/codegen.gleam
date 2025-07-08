@@ -2,38 +2,29 @@ import gleam/list
 import gleam/option.{None, Some}
 
 import starc/analyzer
-import starc/codegen/core.{
-  type Generator, emit, generate, generate_label, perform, pure, traverse,
-}
+import starc/codegen/core.{type Generator, emit, generate, generate_label, perform, pure, traverse}
 import starc/codegen/env.{type SemanticError}
 import starc/codegen/ir
 import starc/parser/ast
 
 fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
   case expr {
-    ast.TypedIntExpr(value:, ty:) ->
-      pure(ir.Immediate(value:, size: ast.size_of(ty)))
+    ast.TypedIntExpr(value:, ty:) -> pure(ir.Immediate(value:, size: ast.size_of(ty)))
 
     ast.TypedBoolExpr(True) -> pure(ir.Immediate(value: 1, size: 1))
     ast.TypedBoolExpr(False) -> pure(ir.Immediate(value: 0, size: 1))
 
-    ast.TypedVarExpr(ty:, frame_offset:) ->
-      pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
+    ast.TypedVarExpr(ty:, frame_offset:) -> pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
 
     ast.TypedSliceExpr(ptr:, len:, frame_offset:, ty:) -> {
       use ptr <- perform(generate_expression(ptr))
-      use _ <- perform(
-        emit([ir.Move(to: ir.deref(ir.RBP, frame_offset, 8), from: ptr)]),
-      )
+      use _ <- perform(emit([ir.Move(to: ir.deref(ir.RBP, frame_offset, 8), from: ptr)]))
 
       use len <- perform(generate_expression(len))
       use _ <- perform(
         emit([
-          ir.Move(
-            to: ir.deref(ir.RBP, frame_offset + 8, ir.size_of(len)),
-            from: len,
-          ),
-        ]),
+          ir.Move(to: ir.deref(ir.RBP, frame_offset + 8, ir.size_of(len)), from: len)
+        ])
       )
 
       pure(ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
@@ -42,14 +33,10 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
     ast.TypedAddrOfExpr(e:, ..) -> {
       case e {
         ast.TypedVarExpr(ty:, frame_offset:) -> {
-          let size = ast.size_of(ty)
           use _ <- perform(
             emit([
-              ir.Lea(
-                to: ir.Register(reg: ir.RegA, size: 8),
-                from: ir.deref(ir.RBP, frame_offset, size),
-              ),
-            ]),
+              ir.Lea(to: ir.Register(reg: ir.RegA, size: 8), from: ir.deref(ir.RBP, frame_offset, ast.size_of(ty)))
+            ])
           )
           pure(ir.Register(reg: ir.RegA, size: 8))
         }
@@ -66,9 +53,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
       use e <- perform(generate_expression(e))
       case e {
         ir.Deref(..) -> {
-          use _ <- perform(
-            emit([ir.Move(to: ir.Register(reg: ir.RegA, size: 8), from: e)]),
-          )
+          use _ <- perform(emit([ir.Move(to: ir.Register(reg: ir.RegA, size: 8), from: e)]))
           pure(ir.deref(ir.Register(reg: ir.RegA, size: 8), 0, ast.size_of(ty)))
         }
 
@@ -95,14 +80,14 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Lea(
             to: out_register,
             from: ir.Deref(
-              value: out_register,
-              offset: aux_register,
+              value:      out_register,
+              offset:     aux_register,
               multiplier: ast.size_of(ty),
-              size: ast.size_of(ty),
-            ),
+              size:       ast.size_of(ty)
+            )
           ),
-          ir.Pop(aux_register),
-        ]),
+          ir.Pop(aux_register)
+        ])
       )
 
       pure(ir.deref(out_register, 0, ast.size_of(ty)))
@@ -118,20 +103,16 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Move(to: aux_register, from: ir.RSP),
           ir.Lea(
             to: ir.RSI,
-            from: ir.deref(
-              ir.RBP,
-              return_frame_offset,
-              ast.size_of(return_type),
-            ),
-          ),
-        ]),
+            from: ir.deref(ir.RBP, return_frame_offset, ast.size_of(return_type))
+          )
+        ])
       )
 
       use _ <- perform(
         traverse(list.reverse(args), fn(arg) {
           use arg <- perform(generate_expression(arg))
           emit([ir.Push(arg)])
-        }),
+        })
       )
 
       use _ <- perform(emit([ir.Call(ir.LabelAddress(label))]))
@@ -140,8 +121,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Move(to: ir.RSP, from: aux_register),
           ir.Pop(ir.RSI),
-          ir.Pop(aux_register),
-        ]),
+          ir.Pop(aux_register)
+        ])
       )
 
       pure(ir.deref(ir.RBP, return_frame_offset, ast.size_of(return_type)))
@@ -163,8 +144,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Add(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -186,8 +167,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Sub(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -209,8 +190,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Mul(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -232,8 +213,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Div(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -262,8 +243,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Cmp(aux_register, e2),
           ir.ExtractZF(out_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -288,7 +269,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.ExtractZF(out_register),
           ir.Not(out_register),
           ir.And(to: out_register, from: ir.Immediate(value: 1, size: 1)),
-          ir.Pop(aux_register_save),
+          ir.Pop(aux_register_save)
         ]),
       )
 
@@ -317,8 +298,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Label("1"),
           ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -346,8 +327,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Label("1"),
           ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -375,8 +356,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Label("1"),
           ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -404,8 +385,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
           ir.Label("1"),
           ir.Move(to: out_register, from: ir.Immediate(value: 1, size: 1)),
           ir.Label("2"),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -428,8 +409,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.And(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -452,8 +433,8 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
         emit([
           ir.Or(to: aux_register, from: e2),
           ir.Move(to: out_register, from: aux_register),
-          ir.Pop(aux_register_save),
-        ]),
+          ir.Pop(aux_register_save)
+        ])
       )
 
       pure(out_register)
@@ -461,9 +442,7 @@ fn generate_expression(expr: ast.TypedExpression) -> Generator(ir.Value, r) {
 
     ast.TypedNotExpr(e) -> {
       use e <- perform(generate_expression(e))
-      use _ <- perform(
-        emit([ir.Not(e), ir.And(to: e, from: ir.Immediate(value: 1, size: 1))]),
-      )
+      use _ <- perform(emit([ir.Not(e), ir.And(e, ir.Immediate(1, 1))]))
       pure(e)
     }
   }
@@ -476,10 +455,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
         ast.TypedVarExpr(ty:, frame_offset:) -> {
           use expr <- perform(generate_expression(expr))
           emit([
-            ir.Move(
-              to: ir.deref(ir.RBP, frame_offset, ast.size_of(ty)),
-              from: expr,
-            ),
+            ir.Move(to: ir.deref(ir.RBP, frame_offset, ast.size_of(ty)), from: expr)
           ])
         }
 
@@ -495,7 +471,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
 
           emit([
             ir.Move(to: ir.deref(aux_regiser, 0, ast.size_of(ty)), from: expr),
-            ir.Pop(aux_regiser),
+            ir.Pop(aux_regiser)
           ])
         }
 
@@ -520,9 +496,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
     ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
       use end_label <- perform(generate_label())
 
-      use elseifs_labels <- perform(
-        traverse(elseifs, fn(_) { generate_label() }),
-      )
+      use elseifs_labels <- perform(traverse(elseifs, fn(_) { generate_label() }))
       use else_label <- perform(generate_label())
       let alt_labels = list.append(elseifs_labels, [else_label])
 
@@ -533,8 +507,8 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
       use _ <- perform(
         emit([
           ir.Cmp(condition, ir.Immediate(value: 1, size: ir.size_of(condition))),
-          ir.JNE(ir.LabelAddress(false_label)),
-        ]),
+          ir.JNE(ir.LabelAddress(false_label))
+        ])
       )
 
       use _ <- perform(traverse(block, generate_statement))
@@ -553,8 +527,8 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
                 condition,
                 ir.Immediate(value: 1, size: ir.size_of(condition)),
               ),
-              ir.JNE(ir.LabelAddress(next_false_label)),
-            ]),
+              ir.JNE(ir.LabelAddress(next_false_label))
+            ])
           )
 
           use _ <- perform(traverse(block, generate_statement))
@@ -577,7 +551,7 @@ fn generate_statement(statement: ast.TypedStatement) -> Generator(Nil, r) {
       use expr <- perform(generate_expression(expr))
       emit([
         ir.Move(to: ir.deref(ir.RSI, 0, size), from: expr),
-        ir.Jump(ir.LabelAddress("9f")),
+        ir.Jump(ir.LabelAddress("9f"))
       ])
     }
   }
@@ -595,9 +569,7 @@ fn generate_function(declaration: ast.TypedDeclaration) -> Generator(Nil, r) {
   pure(Nil)
 }
 
-pub fn generate_program(
-  program: ast.UntypedProgram,
-) -> Result(ir.Program, SemanticError) {
+pub fn generate_program(program: ast.UntypedProgram) -> Result(ir.Program, SemanticError) {
   let g = {
     use tree <- perform(analyzer.analyze_program(program))
     traverse(tree, generate_function)

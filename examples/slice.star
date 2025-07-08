@@ -1,3 +1,8 @@
+fn test(begin *int16, length int64) int16 {
+    array := []int16(begin, length)
+    return array[1]
+}
+
 fn main() {
     y int8 := 20
     z int8 := 30
@@ -6,6 +11,11 @@ fn main() {
     print_int8(slice[0])
     print_int8(slice[1])
     print_int8(slice[0] * slice[1])
+
+    a int16 := 100
+    b int16 := 2
+
+    print_int16(test(&b, 2))
 }
 
 

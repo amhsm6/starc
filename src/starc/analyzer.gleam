@@ -6,21 +6,15 @@ import starc/codegen/core.{
   type Generator, add_frame_offset, assert_unique_symbol, die, get_frame_offset,
   get_return_type, insert_symbol, perform, pop_frame, pure, push_frame,
   resolve_symbol, resolve_type, return_found, set_frame_offset, set_return_type,
-  sub_frame_offset, traverse, traverse_until_return,
+  sub_frame_offset, traverse, traverse_until_return
 }
-import starc/codegen/env.{
-  type Environment, type SemanticError, Function, Variable,
-}
+import starc/codegen/env.{type Environment, type SemanticError, Function, Variable}
 import starc/lexer/token.{type Span}
 import starc/parser/ast
 
-fn typify_constants(
-  expr: ast.TypedExpression,
-  ty: ast.Type,
-) -> Generator(ast.TypedExpression, r) {
+fn typify_constants(expr: ast.TypedExpression, ty: ast.Type) -> Generator(ast.TypedExpression, r) {
   case expr {
-    ast.TypedIntExpr(value:, ty: ast.IntConst) ->
-      pure(ast.TypedIntExpr(value:, ty:))
+    ast.TypedIntExpr(value:, ty: ast.IntConst) -> pure(ast.TypedIntExpr(value:, ty:))
 
     ast.TypedAddExpr(e1:, e2:, ty: ast.IntConst) -> {
       use e1 <- perform(typify_constants(e1, ty))
@@ -50,15 +44,9 @@ fn typify_constants(
   }
 }
 
-fn unify(
-  actual: ast.Type,
-  actual_span: Span,
-  expected: ast.Type,
-  expected_span: Option(Span),
-) -> Generator(ast.Type, r) {
+fn unify(actual: ast.Type, actual_span: Span, expected: ast.Type, expected_span: Option(Span)) -> Generator(ast.Type, r) {
   case actual, expected {
-    ast.Void, _ | _, ast.Void ->
-      die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
+    ast.Void, _ | _, ast.Void -> die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
 
     ast.Bool, ast.Bool -> pure(ast.Bool)
 
@@ -89,8 +77,7 @@ fn unify(
       pure(ast.Slice(ty))
     }
 
-    _, _ ->
-      die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
+    _, _ -> die(env.TypeMismatch(actual:, actual_span:, expected:, expected_span:))
   }
 }
 
@@ -115,12 +102,9 @@ fn expect_slice(ty: ast.Type, span: Span) -> Generator(Nil, r) {
   }
 }
 
-fn analyze_expression(
-  expression: ast.UntypedExpression,
-) -> Generator(ast.TypedExpression, r) {
+fn analyze_expression(expression: ast.UntypedExpression) -> Generator(ast.TypedExpression, r) {
   case expression {
-    ast.UntypedIntExpr(value:, ..) ->
-      pure(ast.TypedIntExpr(value:, ty: ast.IntConst))
+    ast.UntypedIntExpr(value:, ..) -> pure(ast.TypedIntExpr(value:, ty: ast.IntConst))
 
     ast.UntypedBoolExpr(value:, ..) -> pure(ast.TypedBoolExpr(value))
 
@@ -130,9 +114,7 @@ fn analyze_expression(
       use sym <- perform(resolve_symbol(id))
       case sym {
         Function(..) -> die(env.FunctionAsValue(id))
-
-        Variable(frame_offset:, ty:) ->
-          pure(ast.TypedVarExpr(ty:, frame_offset:))
+        Variable(frame_offset:, ty:) -> pure(ast.TypedVarExpr(ty:, frame_offset:))
       }
     }
 
@@ -145,12 +127,7 @@ fn analyze_expression(
       let assert ast.Pointer(elem_ty) = ptr_ty
 
       use elem_def_ty <- perform(resolve_type(elem_typeid))
-      use _ <- perform(unify(
-        elem_ty,
-        ptr_span,
-        elem_def_ty,
-        Some(elem_typeid.span),
-      ))
+      use _ <- perform(unify(elem_ty, ptr_span, elem_def_ty, Some(elem_typeid.span)))
 
       let len_span = ast.span_of(len)
       use len <- perform(analyze_expression(len))
@@ -170,9 +147,8 @@ fn analyze_expression(
       let span = ast.span_of(e)
       use e <- perform(analyze_expression(e))
       case e {
-        ast.TypedVarExpr(ty:, ..) ->
-          pure(ast.TypedAddrOfExpr(e:, ty: ast.Pointer(ty)))
-
+        ast.TypedVarExpr(ty:, ..) -> pure(ast.TypedAddrOfExpr(e:, ty: ast.Pointer(ty)))
+        ast.TypedIndexExpr(..) -> todo
         _ -> die(env.AddressNotOfVariable(span))
       }
     }
@@ -218,13 +194,7 @@ fn analyze_expression(
 
               use _ <- perform(case expected_count == actual_count {
                 True -> pure(Nil)
-
-                False ->
-                  die(env.CallArgumentCountMismatch(
-                    expected: expected_count,
-                    actual: actual_count,
-                    span:,
-                  ))
+                False -> die(env.CallArgumentCountMismatch(expected: expected_count, actual: actual_count, span:))
               })
 
               use args <- perform(
@@ -234,25 +204,15 @@ fn analyze_expression(
                   let arg_span = ast.span_of(arg)
                   use arg <- perform(analyze_expression(arg))
 
-                  use ty <- perform(unify(
-                    ast.type_of(arg),
-                    arg_span,
-                    arg_ty,
-                    None,
-                  ))
+                  use ty <- perform(unify(ast.type_of(arg), arg_span, arg_ty, None))
                   typify_constants(arg, ty)
-                }),
+                })
               )
 
               use _ <- perform(sub_frame_offset(ast.size_of(return_type)))
               use frame_offset <- perform(get_frame_offset())
 
-              pure(ast.TypedCallExpression(
-                label:,
-                args:,
-                return_type:,
-                return_frame_offset: frame_offset,
-              ))
+              pure(ast.TypedCallExpression(label:, args:, return_type:, return_frame_offset: frame_offset))
             }
 
             _ -> die(env.CallNotFunction(id.span))
@@ -351,9 +311,7 @@ fn analyze_expression(
       use _ <- perform(expect_int(ty, span))
 
       case e {
-        ast.TypedIntExpr(value:, ..) ->
-          pure(ast.TypedIntExpr(value: -value, ty: ast.IntConst))
-
+        ast.TypedIntExpr(value:, ..) -> pure(ast.TypedIntExpr(value: -value, ty: ast.IntConst))
         _ -> pure(ast.TypedNegExpr(e:, ty:))
       }
     }
@@ -539,17 +497,12 @@ fn analyze_expression(
 
 // FIXMEEEEEE
 fn specialized_analyze_statement(
-  statement: ast.UntypedStatement,
-) -> Generator(
-  ast.TypedStatement,
-  Result(#(Environment, List(b), Bool), SemanticError),
-) {
+  statement: ast.UntypedStatement
+) -> Generator(ast.TypedStatement, Result(#(Environment, List(b), Bool), SemanticError)) {
   analyze_statement(statement)
 }
 
-fn analyze_statement(
-  statement: ast.UntypedStatement,
-) -> Generator(ast.TypedStatement, r) {
+fn analyze_statement(statement: ast.UntypedStatement) -> Generator(ast.TypedStatement, r) {
   case statement {
     ast.UntypedAssignStatement(cell:, expr:) -> {
       let cell_span = ast.span_of(cell)
@@ -558,12 +511,7 @@ fn analyze_statement(
       let expr_span = ast.span_of(expr)
       use expr <- perform(analyze_expression(expr))
 
-      use ty <- perform(unify(
-        ast.type_of(expr),
-        expr_span,
-        ast.type_of(cell),
-        Some(cell_span),
-      ))
+      use ty <- perform(unify(ast.type_of(expr), expr_span, ast.type_of(cell), Some(cell_span)))
       use expr <- perform(typify_constants(expr, ty))
       pure(ast.TypedAssignStatement(cell:, expr:))
     }
@@ -583,12 +531,7 @@ fn analyze_statement(
         Some(typeid) -> {
           use define_ty <- perform(resolve_type(typeid))
 
-          use ty <- perform(unify(
-            ast.type_of(expr),
-            expr_span,
-            define_ty,
-            Some(typeid.span),
-          ))
+          use ty <- perform(unify(ast.type_of(expr), expr_span, define_ty, Some(typeid.span)))
           typify_constants(expr, ty)
         }
       })
@@ -597,30 +540,20 @@ fn analyze_statement(
       use _ <- perform(sub_frame_offset(ast.size_of(ty)))
       use frame_offset <- perform(get_frame_offset())
 
+      // TODO: disallow shadowing functions
       use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
 
-      pure(ast.TypedDefineStatement(
-        var: ast.TypedVarExpr(ty:, frame_offset:),
-        expr:,
-      ))
+      pure(ast.TypedDefineStatement(var: ast.TypedVarExpr(ty:, frame_offset:), expr:))
     }
 
     ast.UntypedIfStatement(condition:, block:, elseifs:, elseblock:) -> {
       let condition_span = ast.span_of(condition)
 
       use condition <- perform(analyze_expression(condition))
-      use _ <- perform(unify(
-        ast.type_of(condition),
-        condition_span,
-        ast.Bool,
-        None,
-      ))
+      use _ <- perform(unify(ast.type_of(condition), condition_span, ast.Bool, None))
 
       use _ <- perform(push_frame())
-      use #(block, if_return_found) <- perform(traverse_until_return(
-        block,
-        specialized_analyze_statement,
-      ))
+      use #(block, if_return_found) <- perform(traverse_until_return(block, specialized_analyze_statement))
       use _ <- perform(pop_frame())
 
       use elseifs <- perform(
@@ -630,22 +563,14 @@ fn analyze_statement(
           let condition_span = ast.span_of(condition)
 
           use condition <- perform(analyze_expression(condition))
-          use _ <- perform(unify(
-            ast.type_of(condition),
-            condition_span,
-            ast.Bool,
-            None,
-          ))
+          use _ <- perform(unify(ast.type_of(condition), condition_span, ast.Bool, None))
 
           use _ <- perform(push_frame())
-          use #(block, return_found) <- perform(traverse_until_return(
-            block,
-            specialized_analyze_statement,
-          ))
+          use #(block, return_found) <- perform(traverse_until_return(block, specialized_analyze_statement))
           use _ <- perform(pop_frame())
 
           pure(#(condition, block, return_found))
-        }),
+        })
       )
 
       let #(elseifs_return_found, elseifs) =
@@ -659,10 +584,7 @@ fn analyze_statement(
 
         Some(block) -> {
           use _ <- perform(push_frame())
-          use #(block, return_found) <- perform(traverse_until_return(
-            block,
-            specialized_analyze_statement,
-          ))
+          use #(block, return_found) <- perform(traverse_until_return(block, specialized_analyze_statement))
           use _ <- perform(pop_frame())
 
           pure(#(Some(block), return_found))
@@ -670,16 +592,8 @@ fn analyze_statement(
       })
 
       case if_return_found && elseifs_return_found && elseblock_return_found {
-        True ->
-          return_found(ast.TypedIfStatement(
-            condition:,
-            block:,
-            elseifs:,
-            elseblock:,
-          ))
-
-        False ->
-          pure(ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:))
+        True -> return_found(ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:))
+        False -> pure(ast.TypedIfStatement(condition:, block:, elseifs:, elseblock:))
       }
     }
 
@@ -697,9 +611,7 @@ fn analyze_statement(
 }
 
 // FIXME: declaration only sees items defined above
-fn analyze_declaration(
-  declaration: ast.UntypedDeclaration,
-) -> Generator(ast.TypedDeclaration, r) {
+fn analyze_declaration(declaration: ast.UntypedDeclaration) -> Generator(ast.TypedDeclaration, r) {
   case declaration {
     ast.UntypedFunctionDeclaration(id:, parameters:, result:, body:, span:) -> {
       use _ <- perform(assert_unique_symbol(id))
@@ -709,7 +621,7 @@ fn analyze_declaration(
           let #(id, typeid) = x
           use ty <- perform(resolve_type(typeid))
           pure(#(id, ty))
-        }),
+        })
       )
 
       use return_type <- perform(case result {
@@ -719,11 +631,7 @@ fn analyze_declaration(
 
       use _ <- perform(insert_symbol(
         id,
-        Function(
-          label: id.name,
-          arg_types: list.map(args, pair.second),
-          return_type:,
-        ),
+        Function(label: id.name, arg_types: list.map(args, pair.second), return_type:)
       ))
 
       use _ <- perform(push_frame())
@@ -738,16 +646,13 @@ fn analyze_declaration(
           use _ <- perform(insert_symbol(id, Variable(frame_offset:, ty:)))
 
           add_frame_offset(ast.size_of(ty))
-        }),
+        })
       )
 
       use _ <- perform(set_frame_offset(0))
       use _ <- perform(set_return_type(return_type))
 
-      use #(body, return_found) <- perform(traverse_until_return(
-        body,
-        specialized_analyze_statement,
-      ))
+      use #(body, return_found) <- perform(traverse_until_return(body, specialized_analyze_statement))
 
       use _ <- perform(case return_type, return_found {
         ast.Void, _ | _, True -> pure(Nil)
@@ -758,17 +663,11 @@ fn analyze_declaration(
 
       use _ <- perform(pop_frame())
 
-      pure(ast.TypedFunctionDeclaration(
-        label: id.name,
-        body:,
-        reserve_bytes: -frame_offset,
-      ))
+      pure(ast.TypedFunctionDeclaration(label: id.name, body:, reserve_bytes: -frame_offset))
     }
   }
 }
 
-pub fn analyze_program(
-  tree: ast.UntypedProgram,
-) -> Generator(ast.TypedProgram, r) {
+pub fn analyze_program(tree: ast.UntypedProgram) -> Generator(ast.TypedProgram, r) {
   traverse(tree, analyze_declaration)
 }
